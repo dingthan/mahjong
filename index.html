@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hội Mạt Chược Vui Vẻ - Private Mini-App</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Supabase JS Client CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        jade: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                            800: '#115e59',
+                            900: '#134e4a',
+                        },
+                        mustard: {
+                            400: '#facc15',
+                            500: '#eab308',
+                            600: '#ca8a04',
+                        },
+                        coral: {
+                            500: '#f87171',
+                            600: '#dc2626',
+                        }
+                    },
+                    fontFamily: {
+                        fredoka: ['Fredoka', 'sans-serif'],
+                        nunito: ['Nunito', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #0f172a;
+            user-select: none;
+        }
+        .font-display {
+            font-family: 'Fredoka', cursive;
+        }
+        /* Mobile Frame Styling for desktop preview */
+        .mobile-container {
+            max-width: 430px;
+            min-height: 100vh;
+            margin: 0 auto;
+            background-color: #fefce8;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            overflow-x: hidden;
+        }
+        .tile-card {
+            background: linear-gradient(135deg, #ffffff 0%, #fef3c7 100%);
+            border: 3px solid #f59e0b;
+            box-shadow: 0 6px 0px #b45309;
+        }
+        .btn-cartoon-green {
+            background: #10b981;
+            border: 3px solid #047857;
+            box-shadow: 0 5px 0px #065f46;
+            transition: all 0.1s ease;
+        }
+        .btn-cartoon-green:active {
+            transform: translateY(4px);
+            box-shadow: 0 1px 0px #065f46;
+        }
+        .btn-cartoon-gold {
+            background: #f59e0b;
+            border: 3px solid #b45309;
+            box-shadow: 0 5px 0px #78350f;
+            transition: all 0.1s ease;
+        }
+        .btn-cartoon-gold:active {
+            transform: translateY(4px);
+            box-shadow: 0 1px 0px #78350f;
+        }
+        .mahjong-icon-bg {
+            background-image: radial-gradient(#14b8a6 15%, transparent 16%), radial-gradient(#f59e0b 15%, transparent 16%);
+            background-size: 30px 30px;
+            background-position: 0 0, 15px 15px;
+            opacity: 0.08;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 min-h-screen flex items-center justify-center p-0 md:p-4">
+
+    <!-- Mobile Viewport Outer Wrapper -->
+    <div class="mobile-container flex flex-col justify-between min-h-screen relative pb-20">
+        <div class="absolute inset-0 mahjong-icon-bg pointer-events-none"></div>
+
+        <!-- APP HEADER -->
+        <header class="bg-gradient-to-r from-jade-700 via-jade-600 to-teal-700 text-white p-4 pt-6 rounded-b-3xl shadow-lg relative z-10 border-b-4 border-jade-900">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-mustard-400 border-2 border-white flex items-center justify-center text-2xl shadow-inner text-amber-900 font-black">
+                        🀄
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-xs bg-emerald-800 text-emerald-200 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Không Chính Thức</span>
+                        </div>
+                        <h1 class="font-display text-xl font-bold text-amber-200 leading-tight">ĐẠI HỘI PHỎNG TAY TRÊN</h1>
+                    </div>
+                </div>
+                <button onclick="toggleLoginModal()" id="userProfileBtn" class="bg-jade-800/80 hover:bg-jade-900 px-3 py-1.5 rounded-xl border border-jade-500 flex items-center gap-2 transition text-xs font-bold">
+                    <span id="userStatusDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="userDisplayName">Sư Huynh #88</span>
+                </button>
+            </div>
+
+            <!-- Lawful Disclaimer Banner -->
+            <div class="mt-3 bg-amber-500/20 border border-amber-300/40 rounded-xl p-2 flex items-center gap-2 text-xs text-amber-100">
+                <i class="fa-solid fa-shield-halved text-mustard-400 text-sm"></i>
+                <p class="leading-tight font-medium">Sân chơi board game giải trí lành mạnh • <b>Nghiêm cấm cược tiền dưới mọi hình thức</b></p>
+            </div>
+        </header>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="p-4 flex-grow relative z-10 space-y-5">
+            
+            <!-- SECTION 1: QUICK ACTIONS & STATS -->
+            <div class="flex items-center justify-between gap-3">
+                <div class="bg-white/80 backdrop-blur border-2 border-amber-200 rounded-2xl p-3 flex-1 flex items-center gap-3 shadow-sm">
+                    <div class="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center text-lg font-bold">
+                        <i class="fa-solid fa-users-viewfinder"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 font-bold uppercase">Bàn Đang Mở</p>
+                        <p id="activeGamesCount" class="font-display text-lg font-bold text-slate-800">2 Kèo Hot</p>
+                    </div>
+                </div>
+
+                <button onclick="openCreateGameModal()" class="btn-cartoon-gold text-slate-900 font-display font-bold px-4 py-3 rounded-2xl flex items-center gap-2 text-sm shadow-md">
+                    <i class="fa-solid fa-plus-circle text-lg"></i>
+                    <span>Lên Kèo Mới</span>
+                </button>
+            </div>
+
+            <!-- SECTION 2: UPCOMING GAMES LIST -->
+            <div>
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="font-display text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-check text-jade-600"></i>
+                        <span>Lịch Trình Tới Kèo</span>
+                    </h2>
+                    <span class="text-xs text-jade-700 bg-jade-100 px-2.5 py-1 rounded-full font-extrabold">Cập nhật Realtime</span>
+                </div>
+
+                <!-- Game Cards Container -->
+                <div id="gamesList" class="space-y-4">
+                    <!-- Dynamic Javascript Content Will Render Here -->
+                </div>
+            </div>
+
+            <!-- SECTION 3: RECENT ACTIVITY / JARGON BOARD -->
+            <div class="bg-gradient-to-r from-teal-50 to-emerald-50 rounded-2xl p-4 border-2 border-teal-200/80">
+                <h3 class="font-display font-bold text-teal-800 text-sm flex items-center gap-2 mb-2">
+                    <i class="fa-solid fa-scroll text-amber-600"></i>
+                    <span>Mật Ngữ Trong Hội</span>
+                </h3>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div class="bg-white/80 p-2 rounded-xl border border-teal-100">
+                        <span class="font-bold text-jade-700 block">🀄 Khởi Sự Hùng Tranh</span>
+                        <span class="text-slate-500 text-[11px]">Tạo ván mạt chược mới</span>
+                    </div>
+                    <div class="bg-white/80 p-2 rounded-xl border border-teal-100">
+                        <span class="font-bold text-amber-600 block">👑 Đủ Bộ Tứ Quý</span>
+                        <span class="text-slate-500 text-[11px]">Đã đủ 4 chân vào bàn</span>
+                    </div>
+                    <div class="bg-white/80 p-2 rounded-xl border border-teal-100">
+                        <span class="font-bold text-purple-600 block">🪑 Ghế Dự Bị Warm-Up</span>
+                        <span class="text-slate-500 text-[11px]">Người thứ 5 chờ kèo sau</span>
+                    </div>
+                    <div class="bg-white/80 p-2 rounded-xl border border-teal-100">
+                        <span class="font-bold text-rose-600 block">🧋 Ăn Bánh Trôi Nước</span>
+                        <span class="text-slate-500 text-[11px]">Thua ván mời trà sữa</span>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- FOOTER NAVBAR -->
+        <nav class="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto bg-white border-t-2 border-amber-200 px-6 py-2.5 flex justify-around items-center z-30 rounded-t-3xl shadow-2xl">
+            <button class="flex flex-col items-center text-jade-600 font-bold text-xs">
+                <i class="fa-solid fa-house-chimney text-xl mb-0.5"></i>
+                <span>Trang Chủ</span>
+            </button>
+            <button onclick="openCreateGameModal()" class="w-12 h-12 -mt-7 bg-mustard-400 border-4 border-white rounded-full flex items-center justify-center text-slate-900 shadow-lg font-bold text-xl active:scale-95 transition">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+            <button onclick="toggleLoginModal()" class="flex flex-col items-center text-slate-400 hover:text-jade-600 font-bold text-xs transition">
+                <i class="fa-solid fa-user-shield text-xl mb-0.5"></i>
+                <span>Tài Khoản</span>
+            </button>
+        </nav>
+
+        <!-- ================= MODALS & POPUPS ================= -->
+
+        <!-- MODAL 1: PRIVATE LOGIN / WHITELIST CHECK -->
+        <div id="loginModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-white rounded-3xl border-4 border-jade-600 w-full max-w-sm p-6 shadow-2xl relative animate-bounce-short">
+                <button onclick="toggleLoginModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+                
+                <div class="text-center mb-5">
+                    <div class="w-16 h-16 bg-jade-100 border-2 border-jade-500 rounded-2xl mx-auto flex items-center justify-center text-3xl mb-2">
+                        🔐
+                    </div>
+                    <h3 class="font-display text-xl font-bold text-slate-800">Thẻ Bài Thông Hành</h3>
+                    <p class="text-xs text-slate-500 mt-1">Chỉ anh em trong Whitelist Admin mới có thể tham gia tạo kèo.</p>
+                </div>
+
+                <form onsubmit="handleLogin(event)" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Số Điện Thoại Xác Minh</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-phone absolute left-3.5 top-3.5 text-slate-400 text-sm"></i>
+                            <input type="tel" id="loginPhoneInput" required placeholder="Nhập SĐT (VD: 0901234567)" class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-jade-500">
+                        </div>
+                        <p class="text-[11px] text-jade-600 mt-1 font-medium">* Thử các SĐT mẫu: 0901234567, 0987654321</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Biệt Danh Trong Hội</label>
+                        <input type="text" id="loginNameInput" placeholder="Ví dụ: Tay Bài Lạ Quắc" class="w-full px-4 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-jade-500">
+                    </div>
+
+                    <button type="submit" class="w-full btn-cartoon-green text-white font-display font-bold py-3 rounded-xl text-base shadow-md">
+                        Xác Nhận Nhập Hội
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL 2: CREATE GAME REQUEST -->
+        <div id="createGameModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-white rounded-3xl border-4 border-amber-500 w-full max-w-sm p-5 shadow-2xl relative">
+                <button onclick="closeCreateGameModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+                
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-xl text-amber-700 font-bold">🀄</div>
+                    <div>
+                        <h3 class="font-display text-lg font-bold text-slate-800">Lên Kèo Sát Thỏ Mới</h3>
+                        <p class="text-xs text-slate-500">Đặt thời gian & rủ hội cạ cứng</p>
+                    </div>
+                </div>
+
+                <form onsubmit="handleCreateGame(event)" class="space-y-3.5">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Thời Gian Khai Cuộc</label>
+                        <select id="gameTimeSelect" class="w-full px-3 py-2.5 bg-amber-50/50 border-2 border-amber-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500">
+                            <option value="19:00 - Tối Nay">19:00 - Tối Nay</option>
+                            <option value="20:30 - Tối Nay">20:30 - Tối Nay</option>
+                            <option value="14:00 - Chiều Mai">14:00 - Chiều Mai</option>
+                            <option value="19:30 - Tối Mai">19:30 - Tối Mai</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Địa Điểm Tụ Hội</label>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <button type="button" onclick="selectLocationType('Chỗ Cũ')" id="locBtnOld" class="py-2 px-3 border-2 border-amber-500 bg-amber-100 text-amber-900 rounded-xl font-bold text-xs flex items-center justify-center gap-1">
+                                <i class="fa-solid fa-store"></i> Chỗ Cũ
+                            </button>
+                            <button type="button" onclick="selectLocationType('Chỗ Mới')" id="locBtnNew" class="py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1">
+                                <i class="fa-solid fa-map-pin"></i> Chỗ Mới
+                            </button>
+                        </div>
+                        <input type="text" id="gameLocationNote" placeholder="Tên quán trà sữa / địa chỉ..." value="Quán Trà Sữa Chân Gỗ (Chỗ Cũ quen thuộc)" class="w-full px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-amber-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Lời Nhắn Kèm Theo</label>
+                        <input type="text" id="gameNote" placeholder="Ví dụ: Đánh nhẹ nhàng vui vẻ không cạ cứng" class="w-full px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-semibold text-slate-700">
+                    </div>
+
+                    <button type="submit" class="w-full btn-cartoon-gold text-slate-900 font-display font-bold py-3 rounded-xl text-sm shadow-md flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span>Phát Lệnh Chiêu Mộ (Tạo Kèo)</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL 3: SHARE LINK OVERLAY -->
+        <div id="shareModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-white rounded-3xl border-4 border-blue-500 w-full max-w-sm p-5 shadow-2xl relative text-center">
+                <button onclick="closeShareModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+                
+                <div class="w-14 h-14 bg-blue-100 text-blue-600 rounded-2xl mx-auto flex items-center justify-center text-2xl mb-2">
+                    <i class="fa-solid fa-share-nodes"></i>
+                </div>
+                <h3 class="font-display text-lg font-bold text-slate-800">Mời Chiến Hữu Vào Bàn!</h3>
+                <p class="text-xs text-slate-500 mb-4">Chia sẻ link này lên Group Zalo / Messenger của Hội</p>
+
+                <div class="bg-slate-100 p-3 rounded-2xl border border-slate-200 text-left text-xs mb-4 space-y-1">
+                    <p class="font-bold text-blue-700">🥊 [MẠT CHƯỢC CLUB] LÊN KÈO MỚI!</p>
+                    <p id="sharePreviewText" class="text-slate-600">Trận chơi lúc 19:00 Tối nay tại Chỗ Cũ. Đang cần tìm 3 chân gỗ chân chính!</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="copyShareLink()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                        <i class="fa-solid fa-copy"></i> Copy Link
+                    </button>
+                    <button onclick="simulateZaloShare()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                        <i class="fa-solid fa-paper-plane"></i> Gửi Qua Zalo
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL 4: 5TH PLAYER RESERVE PROMPT (REJECTION & CREATE NEW) -->
+        <div id="reserveModal" class="fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-white rounded-3xl border-4 border-purple-500 w-full max-w-sm p-5 shadow-2xl relative text-center animate-pulse-once">
+                <div class="w-16 h-16 bg-purple-100 text-purple-600 border-2 border-purple-300 rounded-2xl mx-auto flex items-center justify-center text-3xl mb-3">
+                    🪑
+                </div>
+                <span class="bg-purple-100 text-purple-700 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full">Thông báo hàng ghế dự bị</span>
+                <h3 class="font-display text-lg font-bold text-slate-800 mt-1">Bàn Đã Đủ Bộ Tứ Quý!</h3>
+                
+                <p class="text-xs text-slate-600 my-3 leading-relaxed">
+                    Rất tiếc! Bàn chơi này đã có đủ <b class="text-purple-700">4 tay bài chính thức</b>. Bạn đã được ghi nhận vào danh sách <b class="text-purple-700">Dự Bị (Người thứ 5)</b>.
+                </p>
+
+                <div class="bg-purple-50 p-3 rounded-xl border border-purple-200 text-xs text-purple-900 font-medium mb-4">
+                    💡 Bạn có muốn <b>TỰ TẠO KÈO MỚI</b> ngay để rủ các chiến hữu khác cùng lập bàn không?
+                </div>
+
+                <div class="space-y-2">
+                    <button onclick="acceptReserveAndCreateNew()" class="w-full btn-cartoon-gold text-slate-900 font-display font-bold py-3 rounded-xl text-xs shadow">
+                        🚀 Mở Kèo Mới Ngay & Rủ Bạn
+                    </button>
+                    <button onclick="closeReserveModal()" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2 rounded-xl text-xs">
+                        Ở lại hàng ghế dự bị
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOAST NOTIFICATION -->
+        <div id="toastNotification" class="fixed top-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white border-2 border-amber-400 px-4 py-2.5 rounded-2xl shadow-2xl z-50 flex items-center gap-2 text-xs font-bold transition-all duration-300 opacity-0 pointer-events-none translate-y-[-20px]">
+            <span id="toastIcon">🎉</span>
+            <span id="toastMessage">Thông báo ứng dụng!</span>
+        </div>
+
+    </div>
+
+    <!-- JAVASCRIPT LOGIC & STATE MANAGEMENT -->
+    <script>
+        // --- 1. MOCK DATA & STATE ---
+        const WHITELIST_PHONES = ['0901234567', '0987654321', '0912345678', '0909999999', '0933333333'];
+        
+        let currentUser = {
+            phone: '0901234567',
+            name: 'Trưởng Hội Mạt Chược',
+            isLoggedIn: true
+        };
+
+        let selectedLocationType = 'Chỗ Cũ';
+
+        let gamesData = [
+            {
+                id: 'G101',
+                time: '19:00 - Tối Nay',
+                locationType: 'Chỗ Cũ',
+                locationNote: 'Trà Sữa Hẻm 123 (Chỗ Cũ)',
+                createdBy: 'Trưởng Hội Mạt Chược',
+                players: [
+                    { name: 'Trưởng Hội', phone: '0901234567' },
+                    { name: 'Tay Bài Tố', phone: '0987654321' },
+                    { name: 'Sư Huynh Bảy', phone: '0912345678' }
+                ],
+                substitutes: [],
+                status: 'OPEN' // OPEN or FULL
+            },
+            {
+                id: 'G102',
+                time: '20:30 - Tối Nay',
+                locationType: 'Chỗ Mới',
+                locationNote: 'Quán Cafe Sân Vườn Q3',
+                createdBy: 'Cao Thủ Ẩn Danh',
+                players: [
+                    { name: 'Cao Thủ Ẩn Danh', phone: '0909999999' },
+                    { name: 'Chiến Hữu A', phone: '0933333333' },
+                    { name: 'Chiến Hữu B', phone: '0911111111' },
+                    { name: 'Chiến Hữu C', phone: '0922222222' }
+                ],
+                substitutes: [],
+                status: 'FULL'
+            }
+        ];
+
+        // --- 2. RENDER FUNCTIONS ---
+        function renderGames() {
+            const container = document.getElementById('gamesList');
+            container.innerHTML = '';
+
+            let openCount = 0;
+
+            gamesData.forEach(game => {
+                const isFull = game.players.length >= 4;
+                if (!isFull) openCount++;
+
+                const cardHtml = `
+                    <div class="tile-card rounded-2xl p-4 relative overflow-hidden transition-all">
+                        <!-- Header Status -->
+                        <div class="flex items-center justify-between border-b-2 border-amber-200/60 pb-2.5 mb-3">
+                            <div class="flex items-center gap-2">
+                                <span class="font-display font-bold text-amber-900 text-sm">🀄 Kèo #${game.id}</span>
+                                <span class="text-[10px] bg-amber-200/80 text-amber-900 font-extrabold px-2 py-0.5 rounded-md">
+                                    ${game.locationType}
+                                </span>
+                            </div>
+                            <span class="text-xs font-black px-2.5 py-1 rounded-full ${isFull ? 'bg-emerald-600 text-white' : 'bg-amber-400 text-amber-950'}">
+                                ${isFull ? '👑 ĐỦ BỘ TỨ QUÝ (4/4)' : `🔥 THIẾU ${4 - game.players.length} CHÂN`}
+                            </span>
+                        </div>
+
+                        <!-- Game Details -->
+                        <div class="space-y-1.5 text-xs text-slate-700 mb-3">
+                            <div class="flex items-center gap-2 font-bold text-slate-800">
+                                <i class="fa-regular fa-clock text-amber-600 text-sm"></i>
+                                <span>Giờ chơi: ${game.time}</span>
+                            </div>
+                            <div class="flex items-center gap-2 font-semibold text-slate-600">
+                                <i class="fa-solid fa-location-dot text-rose-500 text-sm"></i>
+                                <span>${game.locationNote}</span>
+                            </div>
+                        </div>
+
+                        <!-- 4 Seats Slots Display -->
+                        <div class="bg-amber-100/60 rounded-xl p-2.5 border border-amber-300/50 mb-3">
+                            <p class="text-[10px] font-bold text-amber-900 uppercase mb-2">Danh Sách Tay Bài (${game.players.length}/4):</p>
+                            <div class="grid grid-cols-4 gap-1.5 text-center">
+                                ${renderSeats(game.players)}
+                            </div>
+                        </div>
+
+                        ${game.substitutes.length > 0 ? `
+                            <p class="text-[11px] text-purple-700 font-bold mb-3 flex items-center gap-1">
+                                <i class="fa-solid fa-chair"></i> Ghế dự bị (Người thứ 5+): ${game.substitutes.map(s => s.name).join(', ')}
+                            </p>
+                        ` : ''}
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center gap-2">
+                            ${!isFull ? `
+                                <button onclick="joinGame('${game.id}')" class="flex-1 btn-cartoon-green text-white font-display font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1">
+                                    <i class="fa-solid fa-user-plus"></i> Vào Bàn Ngay
+                                </button>
+                            ` : `
+                                <button onclick="joinGame('${game.id}')" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-3 rounded-xl text-xs border-2 border-purple-800 shadow flex items-center justify-center gap-1">
+                                    <i class="fa-solid fa-couch"></i> Xin Ghế Dự Bị
+                                </button>
+                            `}
+                            
+                            <button onclick="openShareModal('${game.id}')" class="bg-white hover:bg-slate-100 text-slate-700 border-2 border-slate-300 font-bold p-2 rounded-xl text-xs flex items-center justify-center shadow-sm">
+                                <i class="fa-solid fa-share-nodes text-sm text-blue-600"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.innerHTML += cardHtml;
+            });
+
+            document.getElementById('activeGamesCount').innerText = `${openCount} Kèo Đang Thiếu`;
+            document.getElementById('userDisplayName').innerText = currentUser.name;
+        }
+
+        function renderSeats(players) {
+            let html = '';
+            for (let i = 0; i < 4; i++) {
+                if (players[i]) {
+                    html += `
+                        <div class="bg-white border-2 border-amber-400 rounded-lg p-1 shadow-sm">
+                            <div class="text-xs">🀄</div>
+                            <div class="text-[10px] font-extrabold text-slate-800 truncate">${players[i].name}</div>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="bg-amber-200/40 border-2 border-dashed border-amber-400/80 rounded-lg p-1 text-amber-700">
+                            <div class="text-xs opacity-50">👤</div>
+                            <div class="text-[10px] font-bold">Chờ Chân</div>
+                        </div>
+                    `;
+                }
+            }
+            return html;
+        }
+
+        // --- 3. JOIN GAME & 4+1 LOGIC ---
+        function joinGame(gameId) {
+            if (!currentUser.isLoggedIn) {
+                showToast('🔒 Bạn cần nhập SĐT Whitelist để tham gia!', '⚠️');
+                toggleLoginModal();
+                return;
+            }
+
+            const game = gamesData.find(g => g.id === gameId);
+            if (!game) return;
+
+            // Check if user already in players
+            const alreadyJoined = game.players.some(p => p.phone === currentUser.phone);
+            if (alreadyJoined) {
+                showToast('Bạn đã có tên trong bàn chơi này rồi!', '😊');
+                return;
+            }
+
+            // LOGIC 1: If less than 4 players -> Add player
+            if (game.players.length < 4) {
+                game.players.push({ name: currentUser.name, phone: currentUser.phone });
+                
+                // IF EXACTLY 4 PLAYERS NOW -> TRIGGER NOTIFICATION TO ALL 4
+                if (game.players.length === 4) {
+                    game.status = 'FULL';
+                    showToast(`🎉 Bàn #${game.id} đã ĐỦ BỘ TỨ QUÝ! Thông báo hẹn giờ đã gửi tới 4 chiến hữu.`, '🔔');
+                } else {
+                    showToast(`Đã ghi tên ${currentUser.name} vào bàn thành công!`, '✅');
+                }
+
+                renderGames();
+            } 
+            // LOGIC 2: 5TH PLAYER ACCEPTANCE -> SHOW RESERVE PROMPT & ASK TO CREATE NEW
+            else {
+                // Add to substitutes
+                if (!game.substitutes.some(s => s.phone === currentUser.phone)) {
+                    game.substitutes.push({ name: currentUser.name, phone: currentUser.phone });
+                }
+                renderGames();
+                // Open 5th Player Reserve Popup
+                openReserveModal();
+            }
+        }
+
+        // --- 4. CREATE GAME LOGIC ---
+        function handleCreateGame(e) {
+            e.preventDefault();
+            const time = document.getElementById('gameTimeSelect').value;
+            const locationNote = document.getElementById('gameLocationNote').value || selectedLocationType;
+
+            const newGame = {
+                id: 'G' + Math.floor(100 + Math.random() * 900),
+                time: time,
+                locationType: selectedLocationType,
+                locationNote: locationNote,
+                createdBy: currentUser.name,
+                players: [{ name: currentUser.name, phone: currentUser.phone }],
+                substitutes: [],
+                status: 'OPEN'
+            };
+
+            gamesData.unshift(newGame);
+            closeCreateGameModal();
+            renderGames();
+            showToast('Tạo kèo thành công! Hãy chia sẻ link rủ hội cạ cứng.', '🚀');
+            openShareModal(newGame.id);
+        }
+
+        function selectLocationType(type) {
+            selectedLocationType = type;
+            const btnOld = document.getElementById('locBtnOld');
+            const btnNew = document.getElementById('locBtnNew');
+            const noteInput = document.getElementById('gameLocationNote');
+
+            if (type === 'Chỗ Cũ') {
+                btnOld.className = "py-2 px-3 border-2 border-amber-500 bg-amber-100 text-amber-900 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
+                btnNew.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
+                noteInput.value = "Quán Trà Sữa Chân Gỗ (Chỗ Cũ quen thuộc)";
+            } else {
+                btnNew.className = "py-2 px-3 border-2 border-amber-500 bg-amber-100 text-amber-900 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
+                btnOld.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
+                noteInput.value = "";
+                noteInput.placeholder = "Nhập địa chỉ quán mới...";
+            }
+        }
+
+        // --- 5. PRIVATE INVITE WHITELIST LOGIC ---
+        function handleLogin(e) {
+            e.preventDefault();
+            const phone = document.getElementById('loginPhoneInput').value.trim();
+            const name = document.getElementById('loginNameInput').value.trim() || 'Thành Viên Mới';
+
+            if (WHITELIST_PHONES.includes(phone)) {
+                currentUser = { phone, name, isLoggedIn: true };
+                toggleLoginModal();
+                renderGames();
+                showToast(`Chào mừng ${name} đã xác minh Whitelist thành công!`, '🔓');
+            } else {
+                alert(`⚠️ SĐT [${phone}] chưa có trong danh sách Đặc Quyền Whitelist của Admin!\n\nVui lòng liên hệ Admin Hội Mạt Chược để cấp quyền truy cập.`);
+            }
+        }
+
+        // --- 6. MODAL TOGGLES & HELPERS ---
+        function toggleLoginModal() {
+            document.getElementById('loginModal').classList.toggle('hidden');
+        }
+
+        function openCreateGameModal() {
+            document.getElementById('createGameModal').classList.remove('hidden');
+        }
+
+        function closeCreateGameModal() {
+            document.getElementById('createGameModal').classList.add('hidden');
+        }
+
+        function openShareModal(gameId) {
+            const game = gamesData.find(g => g.id === gameId);
+            if (game) {
+                document.getElementById('sharePreviewText').innerText = 
+                    `Trận chơi lúc ${game.time} tại ${game.locationNote}. Đang tìm ${4 - game.players.length} tay bài chân chính! Nhấn để vào bàn.`;
+            }
+            document.getElementById('shareModal').classList.remove('hidden');
+        }
+
+        function closeShareModal() {
+            document.getElementById('shareModal').classList.add('hidden');
+        }
+
+        function openReserveModal() {
+            document.getElementById('reserveModal').classList.remove('hidden');
+        }
+
+        function closeReserveModal() {
+            document.getElementById('reserveModal').classList.add('hidden');
+        }
+
+        function acceptReserveAndCreateNew() {
+            closeReserveModal();
+            openCreateGameModal();
+        }
+
+        function copyShareLink() {
+            navigator.clipboard.writeText(window.location.href);
+            showToast('Đã copy đường dẫn mời chơi!', '📋');
+            closeShareModal();
+        }
+
+        function simulateZaloShare() {
+            showToast('Đang chuyển hướng chia sẻ qua ứng dụng Zalo...', '📲');
+            setTimeout(() => {
+                closeShareModal();
+            }, 1000);
+        }
+
+        function showToast(msg, icon = '🎉') {
+            const toast = document.getElementById('toastNotification');
+            document.getElementById('toastMessage').innerText = msg;
+            document.getElementById('toastIcon').innerText = icon;
+
+            toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
+            }, 3000);
+        }
+
+        // --- INITIALIZE APP ---
+        document.addEventListener('DOMContentLoaded', () => {
+            renderGames();
+        });
+
+        // Supabase Configuration & Initialization Fix
+        const SUPABASE_URL = "https://jhjpizxffbudymxojaxk.supabase.co"; 
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoanBpenhmZmJ1ZHlteG9qYXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNDIyMzgsImV4cCI6MjEwMzcxODIzOH0.lLBNm99e1VEhLCndRYWq7iN84F774XZjifcNlDoCQbw";
+
+        // Renamed variable to 'supabaseClient' to avoid collision with CDN global window.supabase
+        const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+    </script>
+</body>
+</html>
