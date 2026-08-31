@@ -356,6 +356,17 @@
                 <h3 id="profileModalName" class="font-display text-xl font-bold text-amber-300">Tên Cao Thủ</h3>
                 <p id="profileModalPhone" class="text-xs text-amber-200/70 font-mono mt-0.5">SĐT: 0901234567</p>
 
+                <!-- EDIT/UPDATE NICKNAME IN DATABASE -->
+                <div class="mt-3 bg-slate-900/80 p-2.5 rounded-2xl border border-amber-500/30 text-xs">
+                    <label class="block text-[10px] font-bold text-amber-300 uppercase mb-1 text-left">Đổi Biệt Danh Đại Hội</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="profileModalNameInput" placeholder="Nhập biệt danh mới..." class="w-full px-3 py-1.5 bg-slate-950 border border-amber-500/50 rounded-xl text-xs font-bold text-amber-200 focus:outline-none focus:border-amber-400">
+                        <button onclick="handleUpdateProfileName()" class="bg-amber-500 hover:bg-amber-400 text-red-950 font-extrabold px-3 py-1.5 rounded-xl text-xs whitespace-nowrap shadow transition">
+                            Lưu CSDL
+                        </button>
+                    </div>
+                </div>
+
                 <div class="my-4 bg-red-950/60 p-3 rounded-2xl border border-amber-500/30 text-xs space-y-1.5 text-left">
                     <div class="flex justify-between text-amber-200">
                         <span>Trạng thái Whitelist:</span>
@@ -563,20 +574,21 @@
 
         let activeOnlinePhones = new Set(); // Realtime online active users set
         let presenceChannel = null; // Supabase Realtime channel instance
+        let dbChangesChannel = null; // Supabase Postgres Realtime changes channel
 
-        let selectedLocationType = 'Sào Huyệt Cũ';
+        let selectedLocationType = 'Chỗ Cũ';
         let currentPostImageData = null;
         let currentPostImageFile = null;
 
         let whitelistData = []; // Stores users from Supabase allowed_users table
 
-        // Mock initial game tables data
-        let gamesData = [
+        // Initial Fallback Demo Data (Used when database tables are not yet created in Supabase)
+        const initialDemoGames = [
             {
                 id: 'G101',
                 time: '19:00 - Tối Nay',
                 locationType: 'Chỗ Cũ',
-                locationNote: 'Sào Huyệt Hẻm 123 (Chỗ Cũ quen thuộc)',
+                locationNote: 'Quán Trà Sữa Chân Gỗ (Chỗ Cũ)',
                 createdBy: 'Tây Sài Gòn Phỏng Bài',
                 players: [
                     { name: 'Tây Sài Gòn Phỏng Bài', phone: '0901234567' },
@@ -589,40 +601,33 @@
                 id: 'G102',
                 time: '20:30 - Tối Nay',
                 locationType: 'Chỗ Mới',
-                locationNote: 'Quán Trà Sữa Chân Gỗ',
+                locationNote: 'Sào Huyệt Hẻm 123',
                 createdBy: 'Trưởng Hội Phỏng Tay',
                 players: [
-                    { name: 'Trưởng Hội Phỏng Tay', phone: '0911223344' },
-                    { name: 'A Lùng Ù Đúp', phone: '0933445566' },
-                    { name: 'Cô Ba Mạt Chược', phone: '0977889900' },
-                    { name: 'Thần Bài Bến Lức', phone: '0966554433' }
+                    { name: 'Trưởng Hội Phỏng Tay', phone: '0900000000' }
                 ],
                 substitutes: [],
-                status: 'FULL'
+                status: 'OPEN'
             }
         ];
 
-        // Mock chat feed data
-        let chatPostsData = [
+        const initialDemoPosts = [
             {
-                id: 'POST_1',
+                id: 'POST_DEMO_1',
                 author: 'Tây Sài Gòn Phỏng Bài',
                 timeAgo: '10 phút trước',
-                text: 'Tối nay 19h chiến tiếp không anh em? Đang có tay dẻo quắt cần phục thù 🀄🔥',
-                image: null,
+                text: 'Tối nay 19:00 anh em phỏng bài đúng giờ nhé! Đã đặt sẵn bàn góc VIP 🀄🔥',
+                image: '',
                 likes: 5,
                 isLiked: false
-            },
-            {
-                id: 'POST_2',
-                author: 'Sư Huynh Bảy Phỏng Tố',
-                timeAgo: '1 giờ trước',
-                text: 'Mới làm ván ù đúp phỏng tay đêm qua, hên không chịu nổi! 😂',
-                image: null,
-                likes: 8,
-                isLiked: true
             }
         ];
+
+        // Games data (Synced with Supabase or fallback demo data)
+        let gamesData = [...initialDemoGames];
+
+        // Chat posts data (Synced with Supabase or fallback demo data)
+        let chatPostsData = [...initialDemoPosts];
 
         const SUPABASE_URL = "https://jhjpizxffbudymxojaxk.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoanBpenhmZmJ1ZHlteG9qYXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNDIyMzgsImV4cCI6MjEwMzcxODIzOH0.lLBNm99e1VEhLCndRYWq7iN84F774XZjifcNlDoCQbw";
@@ -631,10 +636,189 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             checkUserSessionOnStartup();
-            renderGames();
-            renderChatPosts();
+            fetchGamesFromSupabase();
+            fetchPostsFromSupabase();
             fetchWhitelistFromSupabase();
+            initSupabaseRealtimeSubscriptions();
         });
+
+        function initSupabaseRealtimeSubscriptions() {
+            if (!supabaseClient) return;
+
+            try {
+                // Subscribe to Postgres changes on games and posts tables
+                dbChangesChannel = supabaseClient
+                    .channel('public-db-changes')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, payload => {
+                        fetchGamesFromSupabase();
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, payload => {
+                        fetchPostsFromSupabase();
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'allowed_users' }, payload => {
+                        fetchWhitelistFromSupabase();
+                    })
+                    .subscribe();
+            } catch (err) {
+                console.warn('Realtime subscription error:', err);
+            }
+        }
+
+        async function fetchGamesFromSupabase() {
+            if (!supabaseClient) {
+                renderGames();
+                return;
+            }
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('games')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.warn('Supabase games table notice:', error.message);
+                    if (gamesData.length === 0) gamesData = [...initialDemoGames];
+                    renderGames();
+                    return;
+                }
+
+                if (data && data.length > 0) {
+                    gamesData = data.map(g => ({
+                        id: g.id,
+                        time: g.time,
+                        locationType: g.location_type,
+                        locationNote: g.location_note,
+                        createdBy: g.created_by,
+                        players: typeof g.players === 'string' ? JSON.parse(g.players) : (g.players || []),
+                        substitutes: typeof g.substitutes === 'string' ? JSON.parse(g.substitutes) : (g.substitutes || []),
+                        status: g.status
+                    }));
+                } else if (data && data.length === 0 && gamesData.length === 0) {
+                    gamesData = [...initialDemoGames];
+                }
+                renderGames();
+            } catch (err) {
+                console.warn('Fetch games exception:', err);
+                if (gamesData.length === 0) gamesData = [...initialDemoGames];
+                renderGames();
+            }
+        }
+
+        async function fetchPostsFromSupabase() {
+            if (!supabaseClient) {
+                renderChatPosts();
+                return;
+            }
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('posts')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.warn('Supabase posts table notice:', error.message);
+                    if (chatPostsData.length === 0) chatPostsData = [...initialDemoPosts];
+                    renderChatPosts();
+                    return;
+                }
+
+                if (data && data.length > 0) {
+                    chatPostsData = data.map(p => ({
+                        id: p.id,
+                        author: p.author,
+                        timeAgo: formatTimeAgo(p.created_at),
+                        text: p.text,
+                        image: p.image_url,
+                        likes: p.likes || 0,
+                        isLiked: false
+                    }));
+                } else if (data && data.length === 0 && chatPostsData.length === 0) {
+                    chatPostsData = [...initialDemoPosts];
+                }
+                renderChatPosts();
+            } catch (err) {
+                console.warn('Fetch posts exception:', err);
+                if (chatPostsData.length === 0) chatPostsData = [...initialDemoPosts];
+                renderChatPosts();
+            }
+        }
+
+        async function fetchGamesFromSupabase() {
+            if (!supabaseClient) return;
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('games')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('Error fetching games:', error.message);
+                    return;
+                }
+
+                if (data) {
+                    gamesData = data.map(g => ({
+                        id: g.id,
+                        time: g.time,
+                        locationType: g.location_type,
+                        locationNote: g.location_note,
+                        createdBy: g.created_by,
+                        players: typeof g.players === 'string' ? JSON.parse(g.players) : (g.players || []),
+                        substitutes: typeof g.substitutes === 'string' ? JSON.parse(g.substitutes) : (g.substitutes || []),
+                        status: g.status
+                    }));
+                    renderGames();
+                }
+            } catch (err) {
+                console.error('Fetch games exception:', err);
+            }
+        }
+
+        async function fetchPostsFromSupabase() {
+            if (!supabaseClient) return;
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('posts')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('Error fetching posts:', error.message);
+                    return;
+                }
+
+                if (data) {
+                    chatPostsData = data.map(p => ({
+                        id: p.id,
+                        author: p.author,
+                        timeAgo: formatTimeAgo(p.created_at),
+                        text: p.text,
+                        image: p.image_url,
+                        likes: p.likes || 0,
+                        isLiked: false
+                    }));
+                    renderChatPosts();
+                }
+            } catch (err) {
+                console.error('Fetch posts exception:', err);
+            }
+        }
+
+        function formatTimeAgo(dateString) {
+            if (!dateString) return 'Vừa xong';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffInSeconds = Math.floor((now - date) / 1000);
+
+            if (diffInSeconds < 60) return 'Vừa xong';
+            if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
+            if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
+            return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
+        }
 
         function checkUserSessionOnStartup() {
             try {
@@ -649,9 +833,22 @@
             initSupabasePresence();
         }
 
+        function isWebSocketAllowed() {
+            try {
+                if (typeof WebSocket === 'undefined') return false;
+                // Test instantiating a socket in a try-catch to detect Canvas sandbox restrictions
+                const testSocket = new WebSocket('wss://localhost:0');
+                testSocket.close();
+                return true;
+            } catch (e) {
+                console.warn('WebSocket connection restricted by Canvas sandbox environment. Falling back to local presence mode.');
+                return false;
+            }
+        }
+
         /* --- SUPABASE REALTIME PRESENCE (ACTIVE STATUS TRACKING WITH FALLBACK) --- */
         function initSupabasePresence() {
-            if (!supabaseClient) {
+            if (!supabaseClient || !isWebSocketAllowed()) {
                 fallbackLocalPresence();
                 return;
             }
@@ -698,7 +895,6 @@
                     })
                     .subscribe(async (status, err) => {
                         if (err || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                            console.warn('Realtime WebSockets blocked or unavailable in preview environment. Falling back to local mode.');
                             fallbackLocalPresence();
                             return;
                         }
@@ -722,7 +918,6 @@
                         }
                     });
             } catch (err) {
-                console.warn('WebSocket connection not allowed in Canvas preview. Switched to offline/local fallback:', err);
                 fallbackLocalPresence();
             }
         }
@@ -762,6 +957,8 @@
             if (currentUser) {
                 document.getElementById('profileModalName').innerText = currentUser.name;
                 document.getElementById('profileModalPhone').innerText = 'SĐT: ' + currentUser.phone;
+                const nameInput = document.getElementById('profileModalNameInput');
+                if (nameInput) nameInput.value = currentUser.name;
                 document.getElementById('profileModal').classList.remove('hidden');
             } else {
                 openMandatoryLoginModal();
@@ -770,6 +967,39 @@
 
         function closeProfileModal() {
             document.getElementById('profileModal').classList.add('hidden');
+        }
+
+        async function handleUpdateProfileName() {
+            if (!currentUser) return;
+            const newName = document.getElementById('profileModalNameInput').value.trim();
+            if (!newName) {
+                showToast('Vui lòng nhập biệt danh!', '⚠️');
+                return;
+            }
+
+            currentUser.name = newName;
+            sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(currentUser));
+            document.getElementById('profileModalName').innerText = newName;
+            updateUserUI();
+
+            if (supabaseClient) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('allowed_users')
+                        .update({ name: newName, last_seen_at: new Date().toISOString() })
+                        .eq('phone', currentUser.phone);
+
+                    if (error) {
+                        console.error('Error updating name in Supabase:', error.message);
+                        showToast('Lỗi lưu tên vào database: ' + error.message, '❌');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Database update error:', err);
+                }
+            }
+
+            showToast('Đã lưu biệt danh mới vào Database!', '✅');
         }
 
         function openMandatoryLoginModal() {
@@ -852,12 +1082,27 @@
             document.getElementById('phoneStepForm').classList.remove('hidden');
         }
 
-        function completeLogin(phone, name) {
+        async function completeLogin(phone, name) {
             currentUser = { phone, name };
             sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(currentUser));
             updateUserUI();
             initSupabasePresence(); // Re-initialize Realtime presence tracking
             document.getElementById('loginModal').classList.add('hidden');
+
+            // Persist/Sync new name back to Supabase allowed_users table
+            if (supabaseClient) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('allowed_users')
+                        .update({ name: name, last_seen_at: new Date().toISOString() })
+                        .eq('phone', phone);
+                    
+                    if (error) console.error('Supabase update name error:', error.message);
+                } catch (err) {
+                    console.error('Failed to sync name to database:', err);
+                }
+            }
+
             showToast(`Chào mừng cao thủ ${name} gia nhập Đại Hội!`, '🀄');
         }
 
@@ -1202,37 +1447,61 @@
             if (currentPostImageFile) {
                 const storageUrl = await uploadImageToSupabaseStorage(currentPostImageFile);
                 if (storageUrl) {
-                    finalImageUrl = storageUrl; // Use public Supabase URL
+                    finalImageUrl = storageUrl;
                 }
             }
 
-            const newPost = {
-                id: 'POST_' + Date.now(),
+            const newPostId = 'POST_' + Date.now();
+            const postPayload = {
+                id: newPostId,
                 author: currentUser.name,
-                timeAgo: 'Vừa xong',
                 text: contentText,
-                image: finalImageUrl,
-                likes: 0,
-                isLiked: false
+                image_url: finalImageUrl,
+                likes: 0
             };
 
-            chatPostsData.unshift(newPost);
-            
+            // Save post into Supabase DB
+            if (supabaseClient) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('posts')
+                        .insert([postPayload]);
+
+                    if (error) {
+                        showToast('Lỗi lưu bài viết: ' + error.message, '❌');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Database post error:', err);
+                }
+            }
+
             // Clear inputs
             textInput.value = '';
             removeImagePreview();
             
-            renderChatPosts();
-            showToast('Đã đăng bài thành công lên Góc Tám!', '🎉');
+            fetchPostsFromSupabase();
+            showToast('Đã đăng bài thành công lên CSDL!', '🎉');
         }
 
-        function toggleLikePost(postId) {
+        async function toggleLikePost(postId) {
             const post = chatPostsData.find(p => p.id === postId);
             if (!post) return;
 
             post.isLiked = !post.isLiked;
             post.likes += post.isLiked ? 1 : -1;
             renderChatPosts();
+
+            if (supabaseClient) {
+                try {
+                    await supabaseClient
+                        .from('posts')
+                        .update({ likes: post.likes })
+                        .eq('id', postId);
+                } catch (err) {
+                    console.error('Failed to update likes in DB:', err);
+                }
+            }
         }
 
         function renderChatPosts() {
@@ -1251,49 +1520,33 @@
             }
 
             chatPostsData.forEach(post => {
-                const cardHtml = `
-                    <div class="bg-white rounded-2xl border-2 border-amber-300/80 p-3.5 shadow-sm space-y-2.5">
-                        <!-- Post Author Header -->
+                const imageHtml = post.image ? `<img src="${post.image}" alt="Post image" class="w-full rounded-xl max-h-60 object-cover my-2 border border-slate-100" onerror="this.style.display='none'">` : '';
+                const card = `
+                    <div class="bg-white rounded-2xl border border-amber-200 p-3.5 shadow-sm space-y-2">
                         <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2.5">
-                                <div class="w-9 h-9 rounded-full bg-gradient-to-br from-red-800 to-amber-800 text-amber-300 font-black flex items-center justify-center text-xs border border-amber-400 shadow-sm">
-                                    🀄
-                                </div>
+                            <div class="flex items-center gap-2">
+                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-red-950 font-black flex items-center justify-center text-xs shadow">🀄</div>
                                 <div>
-                                    <h4 class="text-xs font-black text-slate-900 leading-tight">${post.author}</h4>
+                                    <span class="text-xs font-bold text-slate-800 block leading-tight">${post.author}</span>
                                     <span class="text-[10px] text-slate-400 font-semibold">${post.timeAgo}</span>
                                 </div>
                             </div>
-                            <span class="text-[10px] bg-red-950 text-amber-300 px-2 py-0.5 rounded-full font-bold">Hội Viên</span>
                         </div>
-
-                        <!-- Post Content Text -->
-                        ${post.text ? `<p class="text-xs text-slate-800 font-semibold leading-relaxed whitespace-pre-line">${post.text}</p>` : ''}
-
-                        <!-- Post Attached Image -->
-                        ${post.image ? `
-                            <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-900 max-h-72 flex items-center justify-center">
-                                <img src="${post.image}" alt="Hình ảnh bài đăng" class="w-full object-cover max-h-72 hover:scale-105 transition duration-300">
-                            </div>
-                        ` : ''}
-
-                        <!-- Post Footer Actions (Like / Comment) -->
+                        ${post.text ? `<p class="text-xs text-slate-700 font-medium whitespace-pre-wrap">${post.text}</p>` : ''}
+                        ${imageHtml}
                         <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                            <button onclick="toggleLikePost('${post.id}')" class="flex items-center gap-1.5 font-bold ${post.isLiked ? 'text-rose-600' : 'text-slate-500 hover:text-rose-500'} transition">
-                                <i class="${post.isLiked ? 'fa-solid' : 'fa-regular'} fa-heart text-sm"></i>
+                            <button onclick="toggleLikePost('${post.id}')" class="flex items-center gap-1.5 font-bold ${post.isLiked ? 'text-rose-600' : 'text-slate-500 hover:text-rose-600'} transition">
+                                <i class="${post.isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
                                 <span>${post.likes} Yêu thích</span>
                             </button>
-                            <span class="text-[11px] text-slate-400 font-semibold flex items-center gap-1">
-                                <i class="fa-regular fa-comment text-slate-400"></i> Bình luận
-                            </span>
                         </div>
                     </div>
                 `;
-                container.innerHTML += cardHtml;
+                container.innerHTML += card;
             });
         }
 
-        function joinGame(gameId) {
+        async function joinGame(gameId) {
             if (!currentUser) {
                 showToast('🔒 Bạn cần nhập SĐT Whitelist để tham gia!', '⚠️');
                 openMandatoryLoginModal();
@@ -1309,27 +1562,52 @@
                 return;
             }
 
+            let isReserve = false;
+
             if (game.players.length < 4) {
                 game.players.push({ name: currentUser.name, phone: currentUser.phone });
-                
-                if (game.players.length === 4) {
-                    game.status = 'FULL';
-                    showToast(`🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ! Thông báo hẹn giờ đã gửi tới 4 chiến hữu.`, '🔔');
-                } else {
-                    showToast(`Đã ghi tên ${currentUser.name} vào bàn!`, '✅');
-                }
-
-                renderGames();
+                if (game.players.length === 4) game.status = 'FULL';
             } else {
                 if (!game.substitutes.some(s => s.phone === currentUser.phone)) {
                     game.substitutes.push({ name: currentUser.name, phone: currentUser.phone });
                 }
-                renderGames();
+                isReserve = true;
+            }
+
+            // Save updated game state to Supabase if table exists
+            if (supabaseClient) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('games')
+                        .update({
+                            players: game.players,
+                            substitutes: game.substitutes,
+                            status: game.status
+                        })
+                        .eq('id', gameId);
+
+                    if (error) {
+                        console.warn('Database sync skipped (run setup.sql on Supabase):', error.message);
+                    }
+                } catch (err) {
+                    console.error('Update game error:', err);
+                }
+            }
+
+            renderGames();
+
+            if (!isReserve) {
+                if (game.players.length === 4) {
+                    showToast(`🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!`, '🔔');
+                } else {
+                    showToast(`Đã ghi tên ${currentUser.name} vào bàn!`, '✅');
+                }
+            } else {
                 openReserveModal();
             }
         }
 
-        function handleCreateGame(e) {
+        async function handleCreateGame(e) {
             e.preventDefault();
             if (!currentUser) {
                 openMandatoryLoginModal();
@@ -1339,8 +1617,9 @@
             const time = document.getElementById('gameTimeSelect').value;
             const locationNote = document.getElementById('gameLocationNote').value || selectedLocationType;
 
-            const newGame = {
-                id: 'G' + Math.floor(100 + Math.random() * 900),
+            const gameId = 'G' + Math.floor(100 + Math.random() * 900);
+            const gameObj = {
+                id: gameId,
                 time: time,
                 locationType: selectedLocationType,
                 locationNote: locationNote,
@@ -1350,11 +1629,38 @@
                 status: 'OPEN'
             };
 
-            gamesData.unshift(newGame);
+            const gamePayload = {
+                id: gameId,
+                time: time,
+                location_type: selectedLocationType,
+                location_note: locationNote,
+                created_by: currentUser.name,
+                players: [{ name: currentUser.name, phone: currentUser.phone }],
+                substitutes: [],
+                status: 'OPEN'
+            };
+
+            if (supabaseClient) {
+                try {
+                    const { error } = await supabaseClient
+                        .from('games')
+                        .insert([gamePayload]);
+
+                    if (error) {
+                        console.warn('Database insert skipped (run setup.sql on Supabase):', error.message);
+                    }
+                } catch (err) {
+                    console.error('Insert game error:', err);
+                }
+            }
+
+            // Local state fallback update
+            gamesData.unshift(gameObj);
+
             closeCreateGameModal();
             renderGames();
-            showToast('Tạo kèo thành công! Hãy chia sẻ link rủ hội cạ cứng.', '🚀');
-            openShareModal(newGame.id);
+            showToast('Tạo kèo thành công!', '🚀');
+            openShareModal(gameId);
         }
 
         function selectLocationType(type) {
