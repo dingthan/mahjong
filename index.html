@@ -1411,7 +1411,7 @@ function renderGames() {
                     toggleBtnEl.className = 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all';
                 }
             } else {
-                // Trạng thái: ĐANG ẨN -> Nút hiển thị kiểu Mặc định
+                // Trạng thái: ĐANG ẨN -> Nút hiển thị kiểu Mặc định (VD: tone xám/xanh) (VD: tone đỏ/amber)
                 toggleTextEl.innerText = `Xem kèo cũ`;
                 if (toggleBtnEl) {
                     toggleBtnEl.className = 'bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm';
@@ -2273,9 +2273,14 @@ function closeShareModal() {
 }
 
 function copyShareLink() {
-    const dummyUrl = window.location.href;
-    navigator.clipboard.writeText(`🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${dummyUrl}`);
-    if (typeof showToast === 'function') showToast('Đã copy link rủ cạ cứng!', '📋');
+    const previewEl = document.getElementById('sharePreviewText');
+    const textToCopy = previewEl ? previewEl.innerText : '';
+
+    if (textToCopy) {
+        navigator.clipboard.writeText(textToCopy);
+        if (typeof showToast === 'function') showToast('Đã copy nội dung!', '📋');
+    }
+    
     closeShareModal();
 }
 
