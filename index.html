@@ -2546,15 +2546,32 @@ function simulateZaloShare() {
     closeShareModal();
 }
 // Khởi chạy hàm kiểm tra URL khi DOM sẵn sàng
-// 3. Tự động mở Popup nếu URL có param ?game=G684 (Khi người khác bấm vào link Share)
-document.addEventListener('DOMContentLoaded', () => {
+function checkAndOpenGameFromUrl() {
     const urlParams = new URLSearchParams(window.location.search);
-    const gameIdFromUrl = urlParams.get('game');
-    if (gameIdFromUrl) {
-        openGameDetailModal(gameIdFromUrl);
-    }
-});
+    const gameId = urlParams.get('gameId') || urlParams.get('id');
 
+    if (gameId) {
+        const allGames = typeof gamesData !== 'undefined' ? gamesData : [];
+        const exists = allGames.some(g => g.id === gameId);
+
+        if (exists) {
+            openGameDetailModal(gameId);
+        } else if (typeof showToast === 'function') {
+            showToast(`Không tìm thấy bàn bài #${gameId}!`, '⚠️');
+        }
+    }
+}
+// 3. Tự động mở Popup nếu URL có param ?game=G684 (Khi người khác bấm vào link Share)
+async function initApp() {
+
+    // 2. Render danh sách ra giao diện
+    renderGames();
+
+    // 3. Đã có dữ liệu đầy đủ -> Mới check URL để mở Popup
+    checkAndOpenGameFromUrl();
+}
+
+document.addEventListener('DOMContentLoaded', initApp);
 
     </script>
 </body>
