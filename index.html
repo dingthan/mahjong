@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hội Mạt Chược Vui Vẻ</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.png">
+    <link rel="icon" type="image/x-icon" href="/mahjong/favicon.png">
     
     <!-- Icon hiển thị khi lưu ra màn hình chính trên iPhone/iPad -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/mahjong/favicon.png">
 
     <!-- ================= 2. THUMBNAIL / OPEN GRAPH (Hiện ảnh xem trước khi share Zalo/FB) ================= -->
     <meta property="og:type" content="website">
@@ -712,668 +712,654 @@
 
     <!-- JAVASCRIPT LOGIC & STATE MANAGEMENT -->
     <script>
-        const LOCAL_STORAGE_KEY = 'PHONG_TAY_TREN_USER_SESSION';
-        const SESSION_EXPIRE_MS = 72 * 60 * 60 * 1000; // 72 giờ không vào app
-        
-        let currentUser = null; // Stores { phone, name, role, lastActive }
-        let tempLoginPhone = '';
-        let tempDbUser = null;
-        let isAdminAuthenticated = false;
-        let showExpiredGames = false; // Biến kiểm soát ẩn/hiện kèo đã qua thời gian
+// =====================================================================
+// STATE MANAGEMENT (gom hết biến trạng thái toàn cục vào một chỗ)
+// =====================================================================
+const LOCAL_STORAGE_KEY = 'PHONG_TAY_TREN_USER_SESSION';
+const SESSION_EXPIRE_MS = 72 * 60 * 60 * 1000; // 72 giờ không vào app
 
-        let activeOnlinePhones = new Set();
-        let presenceChannel = null;
-        let dbChangesChannel = null;
+let currentUser = null;        // { phone, name, role, lastActive }
+let tempLoginPhone = '';
+let tempDbUser = null;
+let isAdminAuthenticated = false;
+let showExpiredGames = false;  // Ẩn/hiện kèo đã qua thời gian
 
-        let selectedLocationType = 'Sào Huyệt Cũ';
-        let currentPostImageData = null;
-        let currentPostImageFile = null;
+let activeOnlinePhones = new Set();
+let presenceChannel = null;
+let dbChangesChannel = null;
 
-        let whitelistData = [];
+let selectedLocationType = 'Sào Huyệt Cũ';
+let currentPostImageData = null;
+let currentPostImageFile = null;
 
-        // Initial Demo Data
-        /*const initialDemoGames = [
-            {
-                id: 'G101',
-                time: '19:00 - Tối Nay',
-                locationType: 'Sào Huyệt Cũ',
-                locationNote: 'Sào Huyệt Hẻm 123 (Chỗ Cũ)',
-                createdBy: 'Tây Sài Gòn Phỏng Bài',
-                players: [
-                    { name: 'Tây Sài Gòn Phỏng Bài', phone: '0901234567' },
-                    { name: 'Sư Huynh Bảy Phỏng Tố', phone: '0987654321' }
-                ],
-                substitutes: [],
-                status: 'OPEN',
-                createdAt: new Date().toISOString()
-            },
-            {
-                id: 'G102',
-                time: '20:30 - Tối Nay',
-                locationType: 'Sào Huyệt Mới',
-                locationNote: 'Quán Trà Sữa Chân Gỗ',
-                createdBy: 'Trưởng Hội Phỏng Tay',
-                players: [
-                    { name: 'Trưởng Hội Phỏng Tay', phone: '0900000000' }
-                ],
-                substitutes: [],
-                status: 'OPEN',
-                createdAt: new Date().toISOString()
-            }
-        ];
+let whitelistData = [];
+let gamesData = [];
+let chatPostsData = [];
 
-        const initialDemoPosts = [
-            {
-                id: 'POST_DEMO_1',
-                author: 'Tây Sài Gòn Phỏng Bài',
-                timeAgo: '10 phút trước',
-                text: 'Tối nay 19:00 anh em phỏng bài đúng giờ nhé! Đã đặt sẵn bàn góc VIP 🀄🔥',
-                image: '',
-                likes: 5,
-                isLiked: false
-            }
-        ];*/
+let currentDetailGameId = null;  // kèo đang mở popup chi tiết
+let currentShareGameId = null;   // kèo đang mở popup chia sẻ (FIX: khai báo rõ ràng, tránh biến global ngầm)
+let hasCheckedUrlOnLoad = false; // đã kiểm tra ?gameId= trên URL lúc tải trang chưa
 
-        let gamesData = [];
-        let chatPostsData = [];
+// =====================================================================
+// SUPABASE CLIENT
+// =====================================================================
+const SUPABASE_URL = "https://jhjpizxffbudymxojaxk.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoanBpenhmZmJ1ZHlteG9qYXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNDIyMzgsImV4cCI6MjEwMzcxODIzOH0.lLBNm99e1VEhLCndRYWq7iN84F774XZjifcNlDoCQbw";
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-        const SUPABASE_URL = "https://jhjpizxffbudymxojaxk.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoanBpenhmZmJ1ZHlteG9qYXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNDIyMzgsImV4cCI6MjEwMzcxODIzOH0.lLBNm99e1VEhLCndRYWq7iN84F774XZjifcNlDoCQbw";
+// =====================================================================
+// ÂM THANH
+// =====================================================================
+function playTileClickSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {}
+}
 
-        const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+function playJoinChime() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const notes = [523.25, 659.25, 783.99];
+        notes.forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+            gain.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.08 + 0.2);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + idx * 0.08);
+            osc.stop(ctx.currentTime + idx * 0.08 + 0.2);
+        });
+    } catch (e) {}
+}
 
-        function playTileClickSound() {
-            try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(800, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.08);
-                gain.gain.setValueAtTime(0.3, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.08);
-            } catch (e) {}
-        }
-
-        function playJoinChime() {
-            try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const notes = [523.25, 659.25, 783.99];
-                notes.forEach((freq, idx) => {
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
-                    gain.gain.setValueAtTime(0.2, ctx.currentTime + idx * 0.08);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + idx * 0.08 + 0.2);
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.start(ctx.currentTime + idx * 0.08);
-                    osc.stop(ctx.currentTime + idx * 0.08 + 0.2);
-                });
-            } catch (e) {}
-        }
-
-        /**
-         * Hàm kiểm tra kèo đã hết hạn / qua thời gian chưa.
-         * Quy đổi chuỗi thời gian như "19:00 - Tối Nay", "14:00 - Chiều Mai" hoặc timestamp thành Date object.
-         */
+// =====================================================================
+// KIỂM TRA HẾT HẠN KÈO
+// =====================================================================
 function isGameExpired(game) {
     if (!game) return false;
 
-    // 1. Ưu tiên kiểm tra cột status từ CSDL trước
     if (game.status) {
         const statusUpper = String(game.status).trim().toUpperCase();
-        if (statusUpper === 'EXPIRED' || statusUpper === 'ENDED') {
-            return true;
-        }
+        if (statusUpper === 'EXPIRED' || statusUpper === 'ENDED') return true;
     }
 
     const now = new Date();
-    
-    // Nếu có ISO timestamp endAt/startAt chuẩn từ CSDL
-    if (game.endAt) {
-        return new Date(game.endAt) < now;
-    }
-    if (game.startAt) {
-        return new Date(game.startAt) < now;
-    }
 
-    // Trường hợp dự phòng: Parse từ string time nếu không có ISO timestamp
+    if (game.endAt) return new Date(game.endAt) < now;
+    if (game.startAt) return new Date(game.startAt) < now;
+
+    // Dự phòng: parse từ chuỗi "time" nếu không có timestamp ISO
     try {
         const timeMatch = game.time.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
         if (timeMatch) {
-            const endTimeStr = timeMatch[2]; // Lấy giờ kết thúc HH:mm
+            const endTimeStr = timeMatch[2];
             const dateMatch = game.time.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-            
+
             let gameDate = new Date();
             if (dateMatch) {
                 gameDate = new Date(`${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`);
             }
-            
+
             const [hours, minutes] = endTimeStr.split(':').map(Number);
             gameDate.setHours(hours, minutes, 0, 0);
-            
             return gameDate < now;
         }
     } catch (e) {
         console.error("Lỗi parse thời gian kèo:", e);
     }
-    
+
     return false;
 }
 
-// Toggle ẩn/hiện kèo đã qua thời gian
 function toggleShowExpiredGames() {
     showExpiredGames = !showExpiredGames;
     renderGames();
 }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            checkUserSessionOnStartup();
-            fetchGamesFromSupabase();
-            fetchPostsFromSupabase();
-            fetchWhitelistFromSupabase();
-            initSupabaseRealtimeSubscriptions();
-            calculateScore();
+// =====================================================================
+// KHỞI ĐỘNG APP
+// =====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    checkUserSessionOnStartup();
+    fetchGamesFromSupabase();
+    fetchPostsFromSupabase();
+    fetchWhitelistFromSupabase();
+    initSupabaseRealtimeSubscriptions();
+    calculateScore();
+});
+
+function initSupabaseRealtimeSubscriptions() {
+    if (!supabaseClient) return;
+
+    try {
+        dbChangesChannel = supabaseClient
+            .channel('public-db-changes')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => fetchGamesFromSupabase())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchPostsFromSupabase())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'allowed_users' }, () => fetchWhitelistFromSupabase())
+            .subscribe();
+    } catch (err) {
+        console.warn('Realtime subscription notice:', err);
+    }
+}
+
+// =====================================================================
+// FETCH DỮ LIỆU TỪ SUPABASE
+// =====================================================================
+async function fetchGamesFromSupabase() {
+    if (!supabaseClient) {
+        renderGames();
+        renderLeaderboard();
+        return;
+    }
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('games')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.warn('Games fetch notice:', error.message);
+            // FIX: không còn initialDemoGames (đã bỏ dữ liệu demo) -> fallback về mảng rỗng thay vì ReferenceError
+            if (gamesData.length === 0) gamesData = [];
+            renderGames();
+            renderLeaderboard();
+            return;
+        }
+
+        if (data && data.length > 0) {
+            // FIX: map đủ start_at / end_at / note để isGameExpired() và hiển thị lời nhắn hoạt động đúng
+            gamesData = data.map(g => ({
+                id: g.id,
+                time: g.time,
+                startAt: g.start_at,
+                endAt: g.end_at,
+                note: g.note,
+                locationType: g.location_type,
+                locationNote: g.location_note,
+                createdBy: g.created_by,
+                players: typeof g.players === 'string' ? JSON.parse(g.players) : (g.players || []),
+                substitutes: typeof g.substitutes === 'string' ? JSON.parse(g.substitutes) : (g.substitutes || []),
+                status: g.status,
+                createdAt: g.created_at
+            }));
+        } else {
+            gamesData = [];
+        }
+        renderGames();
+        renderLeaderboard();
+    } catch (err) {
+        console.error('Lỗi khi tải danh sách kèo:', err);
+        if (gamesData.length === 0) gamesData = [];
+        renderGames();
+        renderLeaderboard();
+    }
+}
+
+async function fetchPostsFromSupabase() {
+    if (!supabaseClient) {
+        renderChatPosts();
+        return;
+    }
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('posts')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            // FIX: không còn initialDemoPosts -> fallback về mảng rỗng thay vì ReferenceError
+            if (chatPostsData.length === 0) chatPostsData = [];
+            renderChatPosts();
+            return;
+        }
+
+        chatPostsData = (data || []).map(p => ({
+            id: p.id,
+            author: p.author,
+            timeAgo: formatTimeAgo(p.created_at),
+            text: p.text,
+            image: p.image_url,
+            likes: p.likes || 0,
+            isLiked: false
+        }));
+        renderChatPosts();
+    } catch (err) {
+        if (chatPostsData.length === 0) chatPostsData = [];
+        renderChatPosts();
+    }
+}
+
+async function fetchWhitelistFromSupabase() {
+    if (!supabaseClient) return;
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('allowed_users')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        if (data) {
+            whitelistData = data;
+            renderAdminWhitelist();
+            renderLeaderboard();
+        }
+    } catch (err) {
+        console.warn('Whitelist fetch notice:', err);
+    }
+}
+
+function formatTimeAgo(dateString) {
+    if (!dateString) return 'Vừa xong';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
+
+    if (diffInSeconds < 60) return 'Vừa xong';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
+    return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
+}
+
+// =====================================================================
+// PHIÊN ĐĂNG NHẬP & PRESENCE (ai đang online)
+// =====================================================================
+async function checkUserSessionOnStartup() {
+    try {
+        const savedUserStr = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (savedUserStr) {
+            const savedUser = JSON.parse(savedUserStr);
+            const now = Date.now();
+            const lastActive = savedUser.lastActive || 0;
+
+            if (now - lastActive > SESSION_EXPIRE_MS) {
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                currentUser = null;
+                setTimeout(() => {
+                    showToast('Phiên đăng nhập đã hết hạn sau 72 giờ. Vui lòng xác minh lại!', '⏰');
+                }, 600);
+            } else {
+                savedUser.lastActive = now;
+                currentUser = savedUser;
+
+                if (supabaseClient && currentUser.phone) {
+                    try {
+                        const { data } = await supabaseClient
+                            .from('allowed_users')
+                            .select('role, name, passcode')
+                            .eq('phone', currentUser.phone)
+                            .maybeSingle();
+
+                        if (data) {
+                            if (data.role) currentUser.role = data.role;
+                            if (data.name) currentUser.name = data.name;
+                        }
+                    } catch (err) {
+                        console.warn('Không thể đồng bộ role từ Supabase:', err);
+                    }
+                }
+
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentUser));
+            }
+        }
+    } catch (e) {
+        console.error('Session error:', e);
+    }
+    updateUserUI();
+    initSupabasePresence();
+
+    if (!currentUser) {
+        openMandatoryLoginModal();
+    }
+}
+
+function initSupabasePresence() {
+    if (!supabaseClient || typeof WebSocket === 'undefined') {
+        fallbackLocalPresence();
+        return;
+    }
+
+    if (presenceChannel) {
+        try { supabaseClient.removeChannel(presenceChannel); } catch (e) {}
+        presenceChannel = null;
+    }
+
+    const trackKey = currentUser ? currentUser.phone : 'guest_' + Math.random().toString(36).substring(2, 7);
+
+    try {
+        presenceChannel = supabaseClient.channel('mahjong-presence-room', {
+            config: { presence: { key: trackKey } },
         });
 
-        function initSupabaseRealtimeSubscriptions() {
-            if (!supabaseClient) return;
+        presenceChannel
+            .on('presence', { event: 'sync' }, () => {
+                try {
+                    const state = presenceChannel.presenceState();
+                    const onlinePhones = new Set();
 
-            try {
-                dbChangesChannel = supabaseClient
-                    .channel('public-db-changes')
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => {
-                        fetchGamesFromSupabase();
-                    })
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-                        fetchPostsFromSupabase();
-                    })
-                    .on('postgres_changes', { event: '*', schema: 'public', table: 'allowed_users' }, () => {
-                        fetchWhitelistFromSupabase();
-                    })
-                    .subscribe();
-            } catch (err) {
-                console.warn('Realtime subscription notice:', err);
-            }
-        }
-
-        async function fetchGamesFromSupabase() {
-            if (!supabaseClient) {
-                renderGames();
-                return;
-            }
-
-            try {
-                const { data, error } = await supabaseClient
-                    .from('games')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (error) {
-                    console.warn('Games fetch notice:', error.message);
-                    if (gamesData.length === 0) gamesData = [...initialDemoGames];
-                    renderGames();
-                    return;
-                }
-
-                if (data && data.length > 0) {
-                    // FIX: trước đây thiếu map start_at / end_at / note khiến kèo tương lai
-                    // bị tính sai "đã hết hạn" và lời nhắn (note) biến mất sau khi refetch.
-                    gamesData = data.map(g => ({
-                        id: g.id,
-                        time: g.time,
-                        startAt: g.start_at,
-                        endAt: g.end_at,
-                        note: g.note,
-                        locationType: g.location_type,
-                        locationNote: g.location_note,
-                        createdBy: g.created_by,
-                        players: typeof g.players === 'string' ? JSON.parse(g.players) : (g.players || []),
-                        substitutes: typeof g.substitutes === 'string' ? JSON.parse(g.substitutes) : (g.substitutes || []),
-                        status: g.status,
-                        createdAt: g.created_at
-                    }));
-                }
-                renderGames();
-            } catch (err) {
-                if (gamesData.length === 0) gamesData = [];
-                renderGames();
-            }
-        }
-
-        async function fetchPostsFromSupabase() {
-            if (!supabaseClient) {
-                renderChatPosts();
-                return;
-            }
-
-            try {
-                const { data, error } = await supabaseClient
-                    .from('posts')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (error) {
-                    if (chatPostsData.length === 0) chatPostsData = [...initialDemoPosts];
-                    renderChatPosts();
-                    return;
-                }
-
-                if (data && data.length > 0) {
-                    chatPostsData = data.map(p => ({
-                        id: p.id,
-                        author: p.author,
-                        timeAgo: formatTimeAgo(p.created_at),
-                        text: p.text,
-                        image: p.image_url,
-                        likes: p.likes || 0,
-                        isLiked: false
-                    }));
-                }
-                renderChatPosts();
-            } catch (err) {
-                if (chatPostsData.length === 0) chatPostsData = [...initialDemoPosts];
-                renderChatPosts();
-            }
-        }
-
-        function formatTimeAgo(dateString) {
-            if (!dateString) return 'Vừa xong';
-            const date = new Date(dateString);
-            const now = new Date();
-            const diffInSeconds = Math.floor((now - date) / 1000);
-
-            if (diffInSeconds < 60) return 'Vừa xong';
-            if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút trước`;
-            if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ trước`;
-            return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
-        }
-
-        async function checkUserSessionOnStartup() {
-            try {
-                const savedUserStr = localStorage.getItem(LOCAL_STORAGE_KEY);
-                if (savedUserStr) {
-                    const savedUser = JSON.parse(savedUserStr);
-                    const now = Date.now();
-                    const lastActive = savedUser.lastActive || 0;
-                    
-                    if (now - lastActive > SESSION_EXPIRE_MS) {
-                        localStorage.removeItem(LOCAL_STORAGE_KEY);
-                        currentUser = null;
-                        setTimeout(() => {
-                            showToast('Phiên đăng nhập đã hết hạn sau 72 giờ. Vui lòng xác minh lại!', '⏰');
-                        }, 600);
-                    } else {
-                        savedUser.lastActive = now;
-                        currentUser = savedUser;
-
-                        if (supabaseClient && currentUser.phone) {
-                            try {
-                                const { data } = await supabaseClient
-                                    .from('allowed_users')
-                                    .select('role, name, passcode')
-                                    .eq('phone', currentUser.phone)
-                                    .maybeSingle();
-                                
-                                if (data) {
-                                    if (data.role) currentUser.role = data.role;
-                                    if (data.name) currentUser.name = data.name;
-                                }
-                            } catch (err) {
-                                console.warn('Không thể đồng bộ role từ Supabase:', err);
-                            }
-                        }
-
-                        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentUser));
-                    }
-                }
-            } catch (e) {
-                console.error('Session error:', e);
-            }
-            updateUserUI();
-            initSupabasePresence();
-
-            if (!currentUser) {
-                openMandatoryLoginModal();
-            }
-        }
-
-        // FIX: bỏ hàm test WebSocket giả (isWebSocketAllowed cũ chỉ bắt lỗi đồng bộ,
-        // không phản ánh việc kết nối thực sự có thành công hay không).
-        // Giờ initSupabasePresence() tự dựa vào callback status của subscribe()
-        // để quyết định fallback, chính xác hơn.
-
-        function initSupabasePresence() {
-            if (!supabaseClient || typeof WebSocket === 'undefined') {
-                fallbackLocalPresence();
-                return;
-            }
-
-            if (presenceChannel) {
-                try { supabaseClient.removeChannel(presenceChannel); } catch (e) {}
-                presenceChannel = null;
-            }
-
-            const trackKey = currentUser ? currentUser.phone : 'guest_' + Math.random().toString(36).substring(2, 7);
-
-            try {
-                presenceChannel = supabaseClient.channel('mahjong-presence-room', {
-                    config: { presence: { key: trackKey } },
-                });
-
-                presenceChannel
-                    .on('presence', { event: 'sync' }, () => {
-                        try {
-                            const state = presenceChannel.presenceState();
-                            const onlinePhones = new Set();
-                            
-                            Object.keys(state).forEach(key => {
-                                state[key].forEach(presence => {
-                                    if (presence.phone) onlinePhones.add(presence.phone);
-                                });
-                            });
-
-                            if (currentUser && currentUser.phone) {
-                                onlinePhones.add(currentUser.phone);
-                            }
-
-                            activeOnlinePhones = onlinePhones;
-                            updateOnlineStatusUI();
-                        } catch (e) {
-                            fallbackLocalPresence();
-                        }
-                    })
-                    .subscribe(async (status, err) => {
-                        if (err || status !== 'SUBSCRIBED') {
-                            fallbackLocalPresence();
-                            return;
-                        }
-
-                        if (status === 'SUBSCRIBED' && currentUser) {
-                            try {
-                                await presenceChannel.track({
-                                    phone: currentUser.phone,
-                                    name: currentUser.name,
-                                    onlineAt: new Date().toISOString()
-                                });
-
-                                supabaseClient
-                                    .from('allowed_users')
-                                    .update({ last_seen_at: new Date().toISOString() })
-                                    .eq('phone', currentUser.phone)
-                                    .then();
-                            } catch (e) {
-                                fallbackLocalPresence();
-                            }
-                        }
+                    Object.keys(state).forEach(key => {
+                        state[key].forEach(presence => {
+                            if (presence.phone) onlinePhones.add(presence.phone);
+                        });
                     });
-            } catch (err) {
-                fallbackLocalPresence();
-            }
-        }
 
-        function fallbackLocalPresence() {
-            if (currentUser && currentUser.phone) {
-                activeOnlinePhones.add(currentUser.phone);
-            }
-            updateOnlineStatusUI();
-        }
+                    if (currentUser && currentUser.phone) onlinePhones.add(currentUser.phone);
 
-        function updateOnlineStatusUI() {
-            const countEl = document.getElementById('onlineCountText');
-            if (countEl) {
-                const totalOnline = activeOnlinePhones.size > 0 ? activeOnlinePhones.size : (currentUser ? 1 : 0);
-                countEl.innerText = `${totalOnline} Online`;
-            }
-
-            renderGames();
-            renderAdminWhitelist();
-        }
-
-        function updateUserUI() {
-            const nameEl = document.getElementById('userDisplayName');
-            const dotEl = document.getElementById('userStatusDot');
-            const adminBtn = document.getElementById('adminProfileBtn');
-            const roleBadge = document.getElementById('profileModalRoleBadge');
-
-            if (currentUser) {
-                if (nameEl) nameEl.innerText = currentUser.name;
-                if (dotEl) dotEl.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
-                
-                if (roleBadge) {
-                    roleBadge.innerText = currentUser.role === 'admin' ? '⚡ Quản Trị Viên (Admin)' : '🀄 Hội Viên (Member)';
-                    roleBadge.className = currentUser.role === 'admin' ? 'text-amber-400 font-black uppercase' : 'text-emerald-400 font-bold uppercase';
+                    activeOnlinePhones = onlinePhones;
+                    updateOnlineStatusUI();
+                } catch (e) {
+                    fallbackLocalPresence();
+                }
+            })
+            .subscribe(async (status, err) => {
+                if (err || status !== 'SUBSCRIBED') {
+                    fallbackLocalPresence();
+                    return;
                 }
 
-                if (adminBtn) {
-                    if (currentUser.role === 'admin') {
-                        adminBtn.classList.remove('hidden');
-                    } else {
-                        adminBtn.classList.add('hidden');
+                if (status === 'SUBSCRIBED' && currentUser) {
+                    try {
+                        await presenceChannel.track({
+                            phone: currentUser.phone,
+                            name: currentUser.name,
+                            onlineAt: new Date().toISOString()
+                        });
+
+                        supabaseClient
+                            .from('allowed_users')
+                            .update({ last_seen_at: new Date().toISOString() })
+                            .eq('phone', currentUser.phone)
+                            .then();
+                    } catch (e) {
+                        fallbackLocalPresence();
                     }
-                }
-            } else {
-                if (nameEl) nameEl.innerText = 'Chưa Đăng Nhập';
-                if (dotEl) dotEl.className = 'w-2.5 h-2.5 rounded-full bg-amber-500/50';
-                if (adminBtn) adminBtn.classList.add('hidden');
-            }
-        }
-
-        function openProfileOrLoginModal() {
-            playTileClickSound();
-            if (currentUser) {
-                document.getElementById('profileModalName').innerText = currentUser.name;
-                document.getElementById('profileModalPhone').innerText = 'SĐT: ' + currentUser.phone;
-                const nameInput = document.getElementById('profileModalNameInput');
-                if (nameInput) nameInput.value = currentUser.name;
-                document.getElementById('profileModal').classList.remove('hidden');
-            } else {
-                openMandatoryLoginModal();
-            }
-        }
-
-        function closeProfileModal() {
-            document.getElementById('profileModal').classList.add('hidden');
-        }
-
-        async function handleUpdateProfileName() {
-            if (!currentUser) return;
-            const newName = document.getElementById('profileModalNameInput').value.trim();
-            if (!newName) {
-                showToast('Vui lòng nhập biệt danh!', '⚠️');
-                return;
-            }
-
-            currentUser.name = newName;
-            currentUser.lastActive = Date.now();
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentUser));
-            document.getElementById('profileModalName').innerText = newName;
-            updateUserUI();
-
-            if (supabaseClient) {
-                try {
-                    await supabaseClient
-                        .from('allowed_users')
-                        .update({ name: newName, last_seen_at: new Date().toISOString() })
-                        .eq('phone', currentUser.phone);
-                } catch (err) {}
-            }
-
-            showToast('Đã lưu biệt danh mới!', '✅');
-        }
-
-        function openMandatoryLoginModal() {
-            resetLoginSteps();
-            document.getElementById('loginModal').classList.remove('hidden');
-        }
-
-        function resetLoginSteps() {
-            document.getElementById('phoneStepForm').classList.remove('hidden');
-            document.getElementById('otpStepForm').classList.add('hidden');
-            document.getElementById('nameStepForm').classList.add('hidden');
-            document.getElementById('loginPhoneInput').value = '';
-            document.getElementById('loginOtpInput').value = '';
-            document.getElementById('loginNameInput').value = '';
-            tempLoginPhone = '';
-            tempDbUser = null;
-        }
-
-        async function handlePhoneStep(e) {
-            e.preventDefault();
-            const phone = document.getElementById('loginPhoneInput').value.trim();
-            if (!phone) {
-                showToast('Vui lòng nhập SĐT!', '⚠️');
-                return;
-            }
-
-            tempLoginPhone = phone;
-            document.getElementById('otpPhoneDisplay').innerText = phone;
-
-            if (supabaseClient) {
-                try {
-                    const { data, error } = await supabaseClient
-                        .from('allowed_users')
-                        .select('phone, name, passcode, role')
-                        .eq('phone', phone)
-                        .maybeSingle();
-                    
-                    if (data) {
-                        tempDbUser = data;
-                    } else {
-                        tempDbUser = null;
-                    }
-                } catch (err) {
-                    console.warn('Lỗi khi kiểm tra SĐT từ Supabase:', err);
-                }
-            }
-
-            document.getElementById('phoneStepForm').classList.add('hidden');
-            document.getElementById('otpStepForm').classList.remove('hidden');
-        }
-
-        function handleOtpStep(e) {
-            e.preventDefault();
-            const passcode = document.getElementById('loginOtpInput').value.trim();
-            
-            if (!tempDbUser) {
-                showToast('Số điện thoại chưa có trong danh sách Hội Viên!', '❌');
-                return;
-            }
-
-            const expectedPasscode = tempDbUser.passcode || tempDbUser.secret_code;
-            if (passcode !== expectedPasscode) {
-                showToast('Mật mã hội không chính xác!', '❌');
-                return;
-            }
-
-            const userRole = tempDbUser.role || 'member';
-
-            if (tempDbUser && tempDbUser.name) {
-                completeLogin(tempLoginPhone, tempDbUser.name, userRole);
-            } else {
-                document.getElementById('otpStepForm').classList.add('hidden');
-                document.getElementById('nameStepForm').classList.remove('hidden');
-            }
-        }
-
-        function handleNameStep(e) {
-            e.preventDefault();
-            const name = document.getElementById('loginNameInput').value.trim();
-            if (!name) {
-                showToast('Vui lòng nhập Biệt Danh!', '⚠️');
-                return;
-            }
-            const userRole = tempDbUser?.role || 'member';
-            completeLogin(tempLoginPhone, name, userRole);
-        }
-
-        async function completeLogin(phone, name, role = 'member') {
-            currentUser = { phone, name, role, lastActive: Date.now() };
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentUser));
-            updateUserUI();
-            initSupabasePresence();
-            document.getElementById('loginModal').classList.add('hidden');
-
-            if (supabaseClient) {
-                try {
-                    await supabaseClient
-                        .from('allowed_users')
-                        .update({ name: name, role: role, last_seen_at: new Date().toISOString() })
-                        .eq('phone', phone);
-                } catch (err) {}
-            }
-
-            playJoinChime();
-            showToast(`Chào mừng ${role === 'admin' ? 'Quản Trị Viên' : 'Cao Thủ'} ${name}!`, '🀄');
-        }
-
-        function resetToPhoneStep() {
-            document.getElementById('otpStepForm').classList.add('hidden');
-            document.getElementById('phoneStepForm').classList.remove('hidden');
-        }
-
-        function handleLogout() {
-            localStorage.removeItem(LOCAL_STORAGE_KEY);
-            currentUser = null;
-            isAdminAuthenticated = false;
-            updateUserUI();
-            initSupabasePresence();
-            closeProfileModal();
-            showToast('Đã đăng xuất tài khoản!', '👋');
-
-            openMandatoryLoginModal();
-        }
-
-        function switchTab(tab) {
-            playTileClickSound();
-            document.getElementById('tabViewGames').classList.add('hidden');
-            document.getElementById('tabViewLeaderboard').classList.add('hidden');
-            document.getElementById('tabViewChat').classList.add('hidden');
-            document.getElementById('tabViewCalc').classList.add('hidden');
-
-            const navs = ['navBtnGames', 'navBtnChat', 'navBtnLeaderboard', 'navBtnCalc'];
-            navs.forEach(id => {
-                const el = document.getElementById(id);
-                if (el) {
-                    el.classList.remove('text-amber-400');
-                    el.classList.add('text-slate-400');
                 }
             });
+    } catch (err) {
+        fallbackLocalPresence();
+    }
+}
 
-            if (tab === 'games') {
-                document.getElementById('tabViewGames').classList.remove('hidden');
-                document.getElementById('navBtnGames').classList.add('text-amber-400');
-            } else if (tab === 'chat') {
-                document.getElementById('tabViewChat').classList.remove('hidden');
-                document.getElementById('navBtnChat').classList.add('text-amber-400');
-            } else if (tab === 'leaderboard') {
-                document.getElementById('tabViewLeaderboard').classList.remove('hidden');
-                document.getElementById('navBtnLeaderboard').classList.add('text-amber-400');
-                renderLeaderboard(); // Tải và xếp hạng lại danh sách thành viên từ Supabase
-            } else if (tab === 'calc') {
-                document.getElementById('tabViewCalc').classList.remove('hidden');
-                document.getElementById('navBtnCalc').classList.add('text-amber-400');
-            }
+function fallbackLocalPresence() {
+    if (currentUser && currentUser.phone) {
+        activeOnlinePhones.add(currentUser.phone);
+    }
+    updateOnlineStatusUI();
+}
+
+function updateOnlineStatusUI() {
+    const countEl = document.getElementById('onlineCountText');
+    if (countEl) {
+        const totalOnline = activeOnlinePhones.size > 0 ? activeOnlinePhones.size : (currentUser ? 1 : 0);
+        countEl.innerText = `${totalOnline} Online`;
+    }
+
+    renderGames();
+    renderAdminWhitelist();
+}
+
+function updateUserUI() {
+    const nameEl = document.getElementById('userDisplayName');
+    const dotEl = document.getElementById('userStatusDot');
+    const adminBtn = document.getElementById('adminProfileBtn');
+    const roleBadge = document.getElementById('profileModalRoleBadge');
+
+    if (currentUser) {
+        if (nameEl) nameEl.innerText = currentUser.name;
+        if (dotEl) dotEl.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+
+        if (roleBadge) {
+            roleBadge.innerText = currentUser.role === 'admin' ? '⚡ Quản Trị Viên (Admin)' : '🀄 Hội Viên (Member)';
+            roleBadge.className = currentUser.role === 'admin' ? 'text-amber-400 font-black uppercase' : 'text-emerald-400 font-bold uppercase';
         }
 
-// Hàm escape ký tự nháy đơn/nháy kép để chèn an toàn vào chuỗi onclick=""
+        if (adminBtn) adminBtn.classList.toggle('hidden', currentUser.role !== 'admin');
+    } else {
+        if (nameEl) nameEl.innerText = 'Chưa Đăng Nhập';
+        if (dotEl) dotEl.className = 'w-2.5 h-2.5 rounded-full bg-amber-500/50';
+        if (adminBtn) adminBtn.classList.add('hidden');
+    }
+}
+
+// =====================================================================
+// LOGIN / PROFILE
+// =====================================================================
+function openProfileOrLoginModal() {
+    playTileClickSound();
+    if (currentUser) {
+        document.getElementById('profileModalName').innerText = currentUser.name;
+        document.getElementById('profileModalPhone').innerText = 'SĐT: ' + currentUser.phone;
+        const nameInput = document.getElementById('profileModalNameInput');
+        if (nameInput) nameInput.value = currentUser.name;
+        document.getElementById('profileModal').classList.remove('hidden');
+    } else {
+        openMandatoryLoginModal();
+    }
+}
+
+function closeProfileModal() {
+    document.getElementById('profileModal').classList.add('hidden');
+}
+
+async function handleUpdateProfileName() {
+    if (!currentUser) return;
+    const newName = document.getElementById('profileModalNameInput').value.trim();
+    if (!newName) {
+        showToast('Vui lòng nhập biệt danh!', '⚠️');
+        return;
+    }
+
+    currentUser.name = newName;
+    currentUser.lastActive = Date.now();
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentUser));
+    document.getElementById('profileModalName').innerText = newName;
+    updateUserUI();
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('allowed_users')
+                .update({ name: newName, last_seen_at: new Date().toISOString() })
+                .eq('phone', currentUser.phone);
+        } catch (err) {}
+    }
+
+    showToast('Đã lưu biệt danh mới!', '✅');
+}
+
+function openMandatoryLoginModal() {
+    resetLoginSteps();
+    document.getElementById('loginModal').classList.remove('hidden');
+}
+
+function resetLoginSteps() {
+    document.getElementById('phoneStepForm').classList.remove('hidden');
+    document.getElementById('otpStepForm').classList.add('hidden');
+    document.getElementById('nameStepForm').classList.add('hidden');
+    document.getElementById('loginPhoneInput').value = '';
+    document.getElementById('loginOtpInput').value = '';
+    document.getElementById('loginNameInput').value = '';
+    tempLoginPhone = '';
+    tempDbUser = null;
+}
+
+async function handlePhoneStep(e) {
+    e.preventDefault();
+    const phone = document.getElementById('loginPhoneInput').value.trim();
+    if (!phone) {
+        showToast('Vui lòng nhập SĐT!', '⚠️');
+        return;
+    }
+
+    tempLoginPhone = phone;
+    document.getElementById('otpPhoneDisplay').innerText = phone;
+
+    if (supabaseClient) {
+        try {
+            const { data } = await supabaseClient
+                .from('allowed_users')
+                .select('phone, name, passcode, role')
+                .eq('phone', phone)
+                .maybeSingle();
+
+            tempDbUser = data || null;
+        } catch (err) {
+            console.warn('Lỗi khi kiểm tra SĐT từ Supabase:', err);
+        }
+    }
+
+    document.getElementById('phoneStepForm').classList.add('hidden');
+    document.getElementById('otpStepForm').classList.remove('hidden');
+}
+
+function handleOtpStep(e) {
+    e.preventDefault();
+    const passcode = document.getElementById('loginOtpInput').value.trim();
+
+    if (!tempDbUser) {
+        showToast('Số điện thoại chưa có trong danh sách Hội Viên!', '❌');
+        return;
+    }
+
+    const expectedPasscode = tempDbUser.passcode || tempDbUser.secret_code;
+    if (passcode !== expectedPasscode) {
+        showToast('Mật mã hội không chính xác!', '❌');
+        return;
+    }
+
+    const userRole = tempDbUser.role || 'member';
+
+    if (tempDbUser.name) {
+        completeLogin(tempLoginPhone, tempDbUser.name, userRole);
+    } else {
+        document.getElementById('otpStepForm').classList.add('hidden');
+        document.getElementById('nameStepForm').classList.remove('hidden');
+    }
+}
+
+function handleNameStep(e) {
+    e.preventDefault();
+    const name = document.getElementById('loginNameInput').value.trim();
+    if (!name) {
+        showToast('Vui lòng nhập Biệt Danh!', '⚠️');
+        return;
+    }
+    const userRole = tempDbUser?.role || 'member';
+    completeLogin(tempLoginPhone, name, userRole);
+}
+
+async function completeLogin(phone, name, role = 'member') {
+    currentUser = { phone, name, role, lastActive: Date.now() };
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(currentUser));
+    updateUserUI();
+    initSupabasePresence();
+    document.getElementById('loginModal').classList.add('hidden');
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient
+                .from('allowed_users')
+                .update({ name: name, role: role, last_seen_at: new Date().toISOString() })
+                .eq('phone', phone);
+        } catch (err) {}
+    }
+
+    playJoinChime();
+    showToast(`Chào mừng ${role === 'admin' ? 'Quản Trị Viên' : 'Cao Thủ'} ${name}!`, '🀄');
+}
+
+function resetToPhoneStep() {
+    document.getElementById('otpStepForm').classList.add('hidden');
+    document.getElementById('phoneStepForm').classList.remove('hidden');
+}
+
+function handleLogout() {
+    localStorage.removeItem(LOCAL_STORAGE_KEY);
+    currentUser = null;
+    isAdminAuthenticated = false;
+    updateUserUI();
+    initSupabasePresence();
+    closeProfileModal();
+    showToast('Đã đăng xuất tài khoản!', '👋');
+    openMandatoryLoginModal();
+}
+
+// =====================================================================
+// ĐIỀU HƯỚNG TAB
+// =====================================================================
+function switchTab(tab) {
+    playTileClickSound();
+    ['tabViewGames', 'tabViewLeaderboard', 'tabViewChat', 'tabViewCalc'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+    });
+
+    ['navBtnGames', 'navBtnChat', 'navBtnLeaderboard', 'navBtnCalc'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('text-amber-400');
+            el.classList.add('text-slate-400');
+        }
+    });
+
+    if (tab === 'games') {
+        document.getElementById('tabViewGames').classList.remove('hidden');
+        document.getElementById('navBtnGames').classList.add('text-amber-400');
+    } else if (tab === 'chat') {
+        document.getElementById('tabViewChat').classList.remove('hidden');
+        document.getElementById('navBtnChat').classList.add('text-amber-400');
+    } else if (tab === 'leaderboard') {
+        document.getElementById('tabViewLeaderboard').classList.remove('hidden');
+        document.getElementById('navBtnLeaderboard').classList.add('text-amber-400');
+        renderLeaderboard();
+    } else if (tab === 'calc') {
+        document.getElementById('tabViewCalc').classList.remove('hidden');
+        document.getElementById('navBtnCalc').classList.add('text-amber-400');
+    }
+}
+
+// =====================================================================
+// TIỆN ÍCH ESCAPE CHUỖI
+// =====================================================================
+// Escape dấu nháy để chèn an toàn vào chuỗi onclick=""
 function escapeForAttr(str) {
     return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
+
+// Escape để chèn an toàn vào nội dung text (chống HTML injection từ dữ liệu người dùng)
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = String(str || '');
+    return div.innerHTML;
+}
+
+// =====================================================================
+// DANH SÁCH KÈO
+// =====================================================================
 function renderPlayersHtml(players = [], substitutes = []) {
     const activeCount = players.length;
     let html = players.map(p => {
-        const isOnline = typeof activeOnlinePhones !== 'undefined' && activeOnlinePhones.has(p.phone);
+        const isOnline = activeOnlinePhones.has(p.phone);
         return `
             <div class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-[11px] flex items-center gap-1.5 shadow-sm">
                 <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
-                <span>🀄 ${p.name || p.phone}</span>
+                <span>🀄 ${escapeHtml(p.name || p.phone)}</span>
             </div>`;
     }).join('');
 
@@ -1388,68 +1374,71 @@ function renderPlayersHtml(players = [], substitutes = []) {
         html += `
             <div class="w-full mt-2 text-[11px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200 flex items-center gap-1 font-bold">
                 <span>🪑 Dự bị:</span>
-                <span>${substitutes.map(s => s.name || s.phone).join(', ')}</span>
+                <span>${escapeHtml(substitutes.map(s => s.name || s.phone).join(', '))}</span>
             </div>`;
     }
 
     return html;
 }
 
-// 2. Hàm Render Danh Sách Kèo Phỏng Bài
+function buildGameActionButtonHtml(game, expired, isFull, isUserInGame, isUserInSub, useStopPropagation) {
+    const sp = useStopPropagation ? 'event.stopPropagation(); ' : '';
+    if (expired) {
+        return `<div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">⏳ Kèo đã qua thời gian</div>`;
+    }
+    if (isUserInGame) {
+        return `
+            <button onclick="${sp}leaveGame('${game.id}')${useStopPropagation ? '' : '; closeGameDetailModal();'}" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                <i class="fa-solid fa-door-open"></i>
+                <span>${isUserInSub ? 'Hủy Đăng Ký Dự Bị' : 'Rời Bàn'}</span>
+            </button>`;
+    }
+    return `
+        <button onclick="${sp}joinGame('${game.id}')${useStopPropagation ? '' : '; closeGameDetailModal();'}" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+            <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
+            <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
+        </button>`;
+}
+
 function renderGames() {
     const container = document.getElementById('gamesList');
     const countEl = document.getElementById('activeGamesCount');
-    // Các element điều khiển toggle kèo cũ từ HTML
     const toggleTextEl = document.getElementById('toggleExpiredText');
     const toggleBtnEl = toggleTextEl ? toggleTextEl.closest('button') : null;
     if (!container) return;
 
-    const allGames = (gamesData || []).map(game => ({
-        ...game,
-        expired: isGameExpired(game)
-    }));
-    const activeCount = allGames.filter(g => !isGameExpired(g)).length;
+    // Tính "expired" MỘT LẦN cho mỗi kèo, rồi tái sử dụng thay vì gọi isGameExpired() lặp lại nhiều lần
+    const allGames = (gamesData || []).map(game => ({ ...game, expired: isGameExpired(game) }));
+    const activeCount = allGames.filter(g => !g.expired).length;
     const expiredCount = allGames.length - activeCount;
 
     if (countEl) countEl.innerText = `${activeCount} Kèo Hot`;
     container.innerHTML = '';
 
-// 3. Cập nhật giao diện Nút toggle kèo cũ có sẵn trong HTML
+    // Cập nhật nút toggle kèo cũ
     if (toggleTextEl) {
         if (expiredCount === 0) {
-            // Không có kèo cũ
             toggleTextEl.innerText = 'Không có kèo cũ';
             if (toggleBtnEl) {
                 toggleBtnEl.disabled = true;
                 toggleBtnEl.className = 'opacity-50 cursor-not-allowed text-slate-400 font-medium text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50';
             }
         } else {
-            // Có kèo cũ -> Cho phép bật/tắt & Đổi style/chữ
             if (toggleBtnEl) toggleBtnEl.disabled = false;
-
             if (showExpiredGames) {
-                // Trạng thái: ĐANG HIỆN -> Nút hiển thị kiểu Active
-                toggleTextEl.innerText = `Ẩn kèo cũ`;
-                if (toggleBtnEl) {
-                    toggleBtnEl.className = 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all';
-                }
+                toggleTextEl.innerText = 'Ẩn kèo cũ';
+                if (toggleBtnEl) toggleBtnEl.className = 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all';
             } else {
-                // Trạng thái: ĐANG ẨN -> Nút hiển thị kiểu Mặc định (VD: tone xám/xanh) (VD: tone đỏ/amber)
-                toggleTextEl.innerText = `Xem kèo cũ`;
-                if (toggleBtnEl) {
-                    toggleBtnEl.className = 'bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm';
-                }
+                toggleTextEl.innerText = 'Xem kèo cũ';
+                if (toggleBtnEl) toggleBtnEl.className = 'bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm';
             }
         }
     }
 
-    const filteredGames = allGames.filter(game => showExpiredGames || !isGameExpired(game));
+    const filteredGames = allGames.filter(g => showExpiredGames || !g.expired);
 
-if (filteredGames.length === 0) {
-        const emptyMessage = showExpiredGames 
-            ? 'Chưa có kèo nào đã kết thúc!' 
-            : 'Chưa có kèo nào đang chờ chơi!';
-
+    if (filteredGames.length === 0) {
+        const emptyMessage = showExpiredGames ? 'Chưa có kèo nào đã kết thúc!' : 'Chưa có kèo nào đang chờ chơi!';
         container.insertAdjacentHTML('beforeend', `
             <div class="bg-white rounded-2xl border-2 border-dashed border-amber-300 p-8 text-center text-slate-500 space-y-2">
                 <div class="text-4xl">🀄</div>
@@ -1461,7 +1450,7 @@ if (filteredGames.length === 0) {
     }
 
     filteredGames.forEach(game => {
-        const expired = isGameExpired(game);
+        const expired = game.expired;
         const activePlayerCount = game.players ? game.players.length : 0;
         const isFull = activePlayerCount >= 4;
 
@@ -1469,22 +1458,7 @@ if (filteredGames.length === 0) {
         const isUserInSub = currentUser && game.substitutes?.some(s => s.phone === currentUser.phone);
         const isUserInGame = isUserInMain || isUserInSub;
 
-        let actionButtonHtml = '';
-        if (expired) {
-            actionButtonHtml = `<div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">⏳ Kèo đã qua thời gian</div>`;
-        } else if (isUserInGame) {
-            actionButtonHtml = `
-                <button onclick="event.stopPropagation(); leaveGame('${game.id}')" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
-                    <i class="fa-solid fa-door-open"></i>
-                    <span>${isUserInSub ? 'Hủy Đăng Ký Dự Bị' : 'Rời Bàn'}</span>
-                </button>`;
-        } else {
-            actionButtonHtml = `
-                <button onclick="event.stopPropagation(); joinGame('${game.id}')" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
-                    <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
-                    <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
-                </button>`;
-        }
+        const actionButtonHtml = buildGameActionButtonHtml(game, expired, isFull, isUserInGame, isUserInSub, true);
 
         const card = document.createElement('div');
         card.setAttribute('onclick', `openGameDetailModal('${game.id}')`);
@@ -1492,7 +1466,7 @@ if (filteredGames.length === 0) {
 
         card.innerHTML = `
             ${expired ? `<span class="absolute top-2 right-2 bg-slate-200 text-slate-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Hết Hạn</span>` : ''}
-            
+
             <div class="flex items-center justify-between border-b border-amber-100 pb-2">
                 <div class="flex items-center gap-2">
                     <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
@@ -1500,7 +1474,7 @@ if (filteredGames.length === 0) {
                         <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
                             <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time}
                         </h3>
-                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${game.locationNote || 'Địa điểm quen thuộc'}</p>
+                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${escapeHtml(game.locationNote || 'Địa điểm quen thuộc')}</p>
                     </div>
                 </div>
                 ${!expired ? `
@@ -1512,7 +1486,7 @@ if (filteredGames.length === 0) {
             ${game.note ? `
             <div class="text-[11px] text-slate-600 bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200/60 flex items-center gap-1.5 italic">
                 <i class="fa-solid fa-comment-dots text-amber-600 text-xs"></i>
-                <span>"${game.note}"</span>
+                <span>"${escapeHtml(game.note)}"</span>
             </div>` : ''}
 
             <div>
@@ -1532,19 +1506,22 @@ if (filteredGames.length === 0) {
         container.appendChild(card);
     });
 
-    if (!hasCheckedUrlOnLoad && typeof gamesData !== 'undefined' && gamesData.length > 0) {
+    // Chỉ kiểm tra ?gameId= trên URL một lần duy nhất, sau khi có dữ liệu kèo
+    if (!hasCheckedUrlOnLoad && gamesData.length > 0) {
         hasCheckedUrlOnLoad = true;
         checkAndOpenGameFromUrl();
     }
 }
 
-// 3. Hàm Tham Gia Bàn
+// =====================================================================
+// THAM GIA / RỜI BÀN
+// =====================================================================
 async function joinGame(gameId) {
-    if (typeof playTileClickSound === 'function') playTileClickSound();
-    
+    playTileClickSound();
+
     if (!currentUser) {
-        if (typeof showToast === 'function') showToast('🔒 Bạn cần nhập SĐT Whitelist để tham gia!', '⚠️');
-        if (typeof openMandatoryLoginModal === 'function') openMandatoryLoginModal();
+        showToast('🔒 Bạn cần nhập SĐT Whitelist để tham gia!', '⚠️');
+        openMandatoryLoginModal();
         return;
     }
 
@@ -1552,7 +1529,8 @@ async function joinGame(gameId) {
     if (!game) return;
 
     if (isGameExpired(game)) {
-        if (typeof showToast === 'function') showToast('Kèo này đã hết hạn', '⏰', '. Bày kèo khác ngay!');
+        // FIX: showToast chỉ nhận (message, icon) - gộp lại thành 1 chuỗi thay vì truyền thừa tham số thứ 3
+        showToast('Kèo này đã hết hạn. Bày kèo khác ngay!', '⏰');
         return;
     }
 
@@ -1563,7 +1541,7 @@ async function joinGame(gameId) {
     const inSub = game.substitutes.some(s => s.phone === currentUser.phone);
 
     if (inMain || inSub) {
-        if (typeof showToast === 'function') showToast('Bạn đã có tên trong bàn chơi này rồi!', '😊');
+        showToast('Bạn đã có tên trong bàn chơi này rồi!', '😊');
         return;
     }
 
@@ -1577,15 +1555,11 @@ async function joinGame(gameId) {
         isReserve = true;
     }
 
-    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+    if (supabaseClient) {
         try {
             await supabaseClient
                 .from('games')
-                .update({
-                    players: game.players,
-                    substitutes: game.substitutes,
-                    status: game.status
-                })
+                .update({ players: game.players, substitutes: game.substitutes, status: game.status })
                 .eq('id', gameId);
         } catch (err) {
             console.error("Lỗi cập nhật Supabase:", err);
@@ -1593,27 +1567,21 @@ async function joinGame(gameId) {
     }
 
     renderGames();
+    renderLeaderboard();
 
-    // Thông báo & hiệu ứng âm thanh sau khi tham gia thành công
     if (!isReserve) {
-        if (typeof playJoinChime === 'function') playJoinChime();
-        if (typeof showToast === 'function') {
-            showToast(
-                game.players.length === 4 
-                    ? `🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!` 
-                    : `Đã ghi tên ${currentUser.name} vào bàn!`, 
-                '✅'
-            );
-        }
+        playJoinChime();
+        showToast(
+            game.players.length === 4 ? `🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!` : `Đã ghi tên ${currentUser.name} vào bàn!`,
+            '✅'
+        );
     } else {
-        if (typeof openReserveModal === 'function') openReserveModal();
-        else if (typeof showToast === 'function') showToast('Đã ghi tên bạn vào danh sách Dự Bị!', '🪑');
+        openReserveModal();
     }
 }
 
- // 4. Hàm Rời Bàn (Có tự động đôn Dự bị lên)
 async function leaveGame(gameId) {
-    if (typeof playTileClickSound === 'function') playTileClickSound();
+    playTileClickSound();
     if (!currentUser) return;
 
     const game = (gamesData || []).find(g => g.id === gameId);
@@ -1621,34 +1589,23 @@ async function leaveGame(gameId) {
 
     const wasInMain = game.players.some(p => p.phone === currentUser.phone);
 
-    // Lọc bỏ người dùng khỏi cả 2 danh sách
     game.players = (game.players || []).filter(p => p.phone !== currentUser.phone);
     game.substitutes = (game.substitutes || []).filter(s => s.phone !== currentUser.phone);
 
-    // Nếu người rời bàn thuộc danh sách chính và có người chờ ở dự bị -> Tự động đôn lên
+    // Tự động đôn dự bị lên nếu có chỗ trống
     if (wasInMain && game.substitutes.length > 0 && game.players.length < 4) {
-        const promotedPlayer = game.substitutes.shift(); // Lấy người dự bị đầu tiên
+        const promotedPlayer = game.substitutes.shift();
         game.players.push(promotedPlayer);
-        if (typeof showToast === 'function') {
-            showToast(`🎉 Tay bài dự bị ${promotedPlayer.name} đã được tự động đôn lên bàn chính!`, '✨');
-        }
+        showToast(`🎉 Tay bài dự bị ${promotedPlayer.name} đã được tự động đôn lên bàn chính!`, '✨');
     }
 
-    if (game.players.length < 4) {
-        game.status = 'OPEN';
-    } else if (game.players.length === 4) {
-        game.status = 'FULL';
-    }
+    game.status = game.players.length === 4 ? 'FULL' : 'OPEN';
 
-    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+    if (supabaseClient) {
         try {
             await supabaseClient
                 .from('games')
-                .update({
-                    players: game.players,
-                    substitutes: game.substitutes,
-                    status: game.status
-                })
+                .update({ players: game.players, substitutes: game.substitutes, status: game.status })
                 .eq('id', gameId);
         } catch (err) {
             console.error("Lỗi cập nhật Supabase:", err);
@@ -1656,33 +1613,32 @@ async function leaveGame(gameId) {
     }
 
     renderGames();
-    if (typeof showToast === 'function') showToast('Bạn đã rời khỏi bàn!', '👋');
+    renderLeaderboard();
+    showToast('Bạn đã rời khỏi bàn!', '👋');
 }
 
+// =====================================================================
+// TẠO KÈO MỚI
+// =====================================================================
 const DAYS_VN = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 
-// Tạo danh sách mốc giờ cách nhau 30 phút (00:00 -> 23:30)
 function generate30MinIntervals() {
     const times = [];
     for (let h = 0; h < 24; h++) {
-        for (let m of [0, 30]) {
-            const hh = String(h).padStart(2, '0');
-            const mm = String(m).padStart(2, '0');
-            times.push(`${hh}:${mm}`);
+        for (const m of [0, 30]) {
+            times.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
         }
     }
     return times;
 }
 
-// Cập nhật danh sách Giờ Kết Thúc dựa theo Giờ Bắt Đầu đã chọn
 function updateEndTimeOptions() {
     const startTime = document.getElementById('gameStartTimeSelect').value;
     const endSelect = document.getElementById('gameEndTimeSelect');
     const times = generate30MinIntervals();
 
     endSelect.innerHTML = '';
-    
-    // Lọc chỉ chọn các mốc sau giờ bắt đầu
+
     const validEndTimes = times.filter(t => t > startTime);
     if (validEndTimes.length === 0) validEndTimes.push('23:59');
 
@@ -1693,14 +1649,62 @@ function updateEndTimeOptions() {
         endSelect.appendChild(opt);
     });
 
-    // Mặc định chọn thời gian sau 2 tiếng
     const [h, m] = startTime.split(':').map(Number);
     const targetEndHour = String((h + 2) % 24).padStart(2, '0');
     const targetEndTime = `${targetEndHour}:${String(m).padStart(2, '0')}`;
 
-    if (validEndTimes.includes(targetEndTime)) {
-        endSelect.value = targetEndTime;
+    if (validEndTimes.includes(targetEndTime)) endSelect.value = targetEndTime;
+}
+
+function openCreateGameModal() {
+    if (!currentUser) {
+        openMandatoryLoginModal();
+        return;
     }
+
+    const dateSelect = document.getElementById('gameDateSelect');
+    const startSelect = document.getElementById('gameStartTimeSelect');
+    const times = generate30MinIntervals();
+
+    dateSelect.innerHTML = '';
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const dayNum = String(d.getDate()).padStart(2, '0');
+        const isoDate = `${year}-${month}-${dayNum}`;
+
+        const displayLabel = i === 0 ? `Hôm nay, ${dayNum}/${month}` :
+                              i === 1 ? `Ngày mai, ${dayNum}/${month}` :
+                              `${DAYS_VN[d.getDay()]}, ${dayNum}/${month}`;
+
+        const opt = document.createElement('option');
+        opt.value = isoDate;
+        opt.dataset.label = displayLabel;
+        opt.textContent = displayLabel;
+        dateSelect.appendChild(opt);
+    }
+
+    startSelect.innerHTML = '';
+    times.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        startSelect.appendChild(opt);
+    });
+
+    startSelect.value = '19:00';
+    updateEndTimeOptions();
+
+    document.getElementById('createGameModal').classList.remove('hidden');
+}
+
+function closeCreateGameModal() {
+    const modal = document.getElementById('createGameModal');
+    if (modal) modal.classList.add('hidden');
 }
 
 async function handleCreateGame(event) {
@@ -1713,14 +1717,12 @@ async function handleCreateGame(event) {
     const dateSelect = document.getElementById('gameDateSelect');
     const selectedDateIso = dateSelect.value;
     const selectedDateLabel = dateSelect.options[dateSelect.selectedIndex].dataset.label;
-    
+
     const startTime = document.getElementById('gameStartTimeSelect').value;
     const endTime = document.getElementById('gameEndTimeSelect').value;
-    
-    // Chuỗi hiển thị định dạng tổng hợp (VD: "19:00 - 21:00 (Hôm nay (Thứ Năm, 03/09))")
+
     const formattedTimeString = `${startTime} - ${endTime} (${selectedDateLabel})`;
-    
-    // Timestamp phục vụ lưu trữ CSDL & lọc kèo đã qua
+
     const startAt = new Date(`${selectedDateIso}T${startTime}:00`).toISOString();
     const endAt = new Date(`${selectedDateIso}T${endTime}:00`).toISOString();
 
@@ -1731,11 +1733,9 @@ async function handleCreateGame(event) {
     const gameObj = {
         id: gameId,
         time: formattedTimeString,
-        startAt: startAt,
-        endAt: endAt,
+        startAt, endAt,
         locationType: selectedLocationType,
-        locationNote: locationNote,
-        note: note,
+        locationNote, note,
         createdBy: currentUser.name,
         players: [{ name: currentUser.name, phone: currentUser.phone }],
         substitutes: [],
@@ -1750,7 +1750,7 @@ async function handleCreateGame(event) {
         end_at: endAt,
         location_type: selectedLocationType,
         location_note: locationNote,
-        note: note,
+        note,
         created_by: currentUser.name,
         players: [{ name: currentUser.name, phone: currentUser.phone }],
         substitutes: [],
@@ -1759,16 +1759,14 @@ async function handleCreateGame(event) {
 
     if (supabaseClient) {
         try {
-            const { error } = await supabaseClient
-                .from('games')
-                .insert([gamePayload]);
+            const { error } = await supabaseClient.from('games').insert([gamePayload]);
 
             if (error) {
                 console.error("Lỗi khi lưu Supabase:", error);
                 showToast(`❌ Không lưu được vào Supabase: ${error.message}`, '⚠️');
-                // Vẫn hiện kèo tạm trên máy để không mất trải nghiệm, nhưng KHÔNG đóng modal/coi là thành công
                 gamesData.unshift(gameObj);
                 renderGames();
+                renderLeaderboard();
                 return;
             }
         } catch (err) {
@@ -1778,668 +1776,47 @@ async function handleCreateGame(event) {
         }
     }
 
-            gamesData.unshift(gameObj);
-            closeCreateGameModal();
-            renderGames();
-            playJoinChime();
-            showToast('Tạo kèo thành công!', '🚀');
-            openShareModal(gameId);
-        }
-
-        function selectLocationType(type) {
-            selectedLocationType = type;
-            const btnOld = document.getElementById('locBtnOld');
-            const btnNew = document.getElementById('locBtnNew');
-            const noteInput = document.getElementById('gameLocationNote');
-
-            if (type === 'Sào Huyệt Cũ') {
-                btnOld.className = "py-2 px-3 border-2 border-amber-400 bg-amber-400 text-red-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow";
-                btnNew.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
-                noteInput.value = "Nơi Tình Yêu Bắt Đầu";
-            } else {
-                btnNew.className = "py-2 px-3 border-2 border-amber-400 bg-amber-400 text-red-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow";
-                btnOld.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
-                noteInput.value = "";
-                noteInput.placeholder = "Nhập mật danh địa điểm mới...";
-            }
-        }
-
-        async function handleImageSelect(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            const options = { maxSizeMB: 0.5, maxWidthOrHeight: 800 };
-
-            try {
-                currentPostImageFile = await imageCompression(file, options);
-                showToast('Tải ảnh thành công!');
-
-            } catch (error) {
-                showToast('Nén ảnh thất bại!');
-                console.error(error);
-            }
-
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                currentPostImageData = event.target.result;
-                document.getElementById('imagePreview').src = currentPostImageData;
-                document.getElementById('imagePreviewContainer').classList.remove('hidden');
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function removeImagePreview() {
-            currentPostImageData = null;
-            currentPostImageFile = null;
-            document.getElementById('imagePreview').src = '';
-            document.getElementById('imagePreviewContainer').classList.add('hidden');
-            document.getElementById('chatImageInput').value = '';
-        }
-
-        async function uploadImageToSupabaseStorage(file) {
-            if (!supabaseClient || !file) return null;
-
-            try {
-                const fileExt = file.name.split('.').pop();
-                const fileName = `mahjong_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-                const filePath = `posts/${fileName}`;
-
-                showToast('Đang tải ảnh lên Supabase Storage...', '☁️');
-
-                const { data, error } = await supabaseClient
-                    .storage
-                    .from('mahjong-photos')
-                    .upload(filePath, file, { cacheControl: '3600', upsert: true });
-
-                if (error) return null;
-
-                const { data: publicUrlData } = supabaseClient
-                    .storage
-                    .from('mahjong-photos')
-                    .getPublicUrl(filePath);
-
-                return publicUrlData ? publicUrlData.publicUrl : null;
-            } catch (err) {
-                return null;
-            }
-        }
-
-        async function handleCreatePost() {
-            if (!currentUser) {
-                showToast('🔒 Bạn cần đăng nhập để đăng bài!', '⚠️');
-                openMandatoryLoginModal();
-                return;
-            }
-
-            const textInput = document.getElementById('chatInputText');
-            const contentText = textInput.value.trim();
-
-            if (!contentText && !currentPostImageData) {
-                showToast('Vui lòng nhập nội dung hoặc đính kèm ảnh!', '⚠️');
-                return;
-            }
-
-            let finalImageUrl = currentPostImageData;
-
-            if (currentPostImageFile) {
-                const storageUrl = await uploadImageToSupabaseStorage(currentPostImageFile);
-                if (storageUrl) finalImageUrl = storageUrl;
-            }
-
-            const newPostId = 'POST_' + Date.now();
-            const postPayload = {
-                id: newPostId,
-                author: currentUser.name,
-                text: contentText,
-                image_url: finalImageUrl,
-                likes: 0
-            };
-
-            if (supabaseClient) {
-                try {
-                    const { error } = await supabaseClient
-                        .from('posts')
-                        .insert([postPayload]);
-                    if (error) {
-                        console.error('Lỗi khi đăng bài lên Supabase:', error);
-                        showToast(`❌ Không đăng được bài: ${error.message}`, '⚠️');
-                        return;
-                    }
-                } catch (err) {
-                    console.error('Lỗi khi đăng bài (exception):', err);
-                    showToast(`❌ Lỗi kết nối Supabase: ${err.message || err}`, '⚠️');
-                    return;
-                }
-            }
-
-            textInput.value = '';
-            removeImagePreview();
-            
-            fetchPostsFromSupabase();
-            showToast('Đã đăng bài thành công!', '🎉');
-        }
-
-        async function toggleLikePost(postId) {
-            playTileClickSound();
-            const post = chatPostsData.find(p => p.id === postId);
-            if (!post) return;
-
-            post.isLiked = !post.isLiked;
-            post.likes += post.isLiked ? 1 : -1;
-            renderChatPosts();
-
-            if (supabaseClient) {
-                try {
-                    await supabaseClient
-                        .from('posts')
-                        .update({ likes: post.likes })
-                        .eq('id', postId);
-                } catch (err) {}
-            }
-        }
-
-        function renderChatPosts() {
-            const container = document.getElementById('chatFeedList');
-            if (!container) return;
-            container.innerHTML = '';
-
-            if (chatPostsData.length === 0) {
-                container.innerHTML = `
-                    <div class="bg-white rounded-2xl p-6 text-center text-slate-400 border border-slate-200">
-                        <i class="fa-regular fa-comments text-3xl mb-2 text-slate-300 block"></i>
-                        <p class="text-xs font-bold">Chưa có bài viết nào. Hãy là người mở bát!</p>
-                    </div>
-                `;
-                return;
-            }
-
-            chatPostsData.forEach(post => {
-                const imageHtml = post.image ? `<img src="${post.image}" alt="Post image" class="w-full rounded-xl max-h-60 object-cover my-2 border border-slate-100" onerror="this.style.display='none'">` : '';
-                const card = `
-                    <div class="bg-white rounded-2xl border border-amber-200 p-3.5 shadow-sm space-y-2">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-red-950 font-black flex items-center justify-center text-xs shadow">🀄</div>
-                                <div>
-                                    <span class="text-xs font-bold text-slate-800 block leading-tight">${post.author}</span>
-                                    <span class="text-[10px] text-slate-400 font-semibold">${post.timeAgo}</span>
-                                </div>
-                            </div>
-                        </div>
-                        ${post.text ? `<p class="text-xs text-slate-700 font-medium whitespace-pre-wrap">${post.text}</p>` : ''}
-                        ${imageHtml}
-                        <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                            <button onclick="toggleLikePost('${post.id}')" class="flex items-center gap-1.5 font-bold ${post.isLiked ? 'text-rose-600' : 'text-slate-500 hover:text-rose-600'} transition">
-                                <i class="${post.isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
-                                <span>${post.likes} Yêu thích</span>
-                            </button>
-                        </div>
-                    </div>
-                `;
-                container.innerHTML += card;
-            });
-        }
-
-        async function fetchWhitelistFromSupabase() {
-            if (!supabaseClient) return;
-
-            try {
-                const { data, error } = await supabaseClient
-                    .from('allowed_users')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
-                if (data) {
-                    whitelistData = data;
-                    renderAdminWhitelist();
-                }
-            } catch(err) {}
-        }
-
-        function renderAdminWhitelist() {
-            const container = document.getElementById('adminWhitelistContainer');
-            if (!container) return;
-            container.innerHTML = '';
-
-            if (whitelistData.length === 0) {
-                container.innerHTML = `
-                    <div class="p-4 text-center text-xs text-amber-200/50 bg-slate-950 rounded-xl border border-dashed border-amber-500/20">
-                        Chưa có dữ liệu từ Supabase. Hãy thêm SĐT & Mật Mã mới ở trên!
-                    </div>
-                `;
-                return;
-            }
-
-            whitelistData.forEach(item => {
-                const passcodeVal = item.passcode || item.secret_code;
-                const roleVal = item.role || 'member';
-                const isOnline = activeOnlinePhones.has(item.phone);
-                const div = document.createElement('div');
-                div.className = "bg-slate-950 p-3 rounded-xl border border-amber-500/30 flex items-center justify-between text-xs";
-                // FIX: escape dấu nháy trong phone/passcode/name trước khi chèn vào chuỗi onclick="",
-                // tránh trường hợp giá trị chứa dấu ' làm vỡ cú pháp JS trong attribute.
-                div.innerHTML = `
-                    <div class="space-y-0.5">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
-                            <span class="font-mono font-bold text-amber-300 text-sm">${item.phone}</span>
-                            <span class="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-mono font-bold text-[10px] border border-amber-500/30">Mật mã: ${passcodeVal}</span>
-                            <span class="${roleVal === 'admin' ? 'bg-amber-400 text-red-950 font-black' : 'bg-slate-800 text-slate-300'} px-2 py-0.5 rounded font-bold text-[9px] uppercase">${roleVal}</span>
-                        </div>
-                        <p class="text-[11px] text-slate-400 font-semibold pl-4.5">${item.name || 'Chưa đặt biệt danh'} <span class="text-[10px] ${isOnline ? 'text-emerald-400' : 'text-slate-500'}">(${isOnline ? '🟢 Online' : '⚪ Offline'})</span></p>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                        <button onclick="editPasscodeUser('${escapeForAttr(item.phone)}', '${escapeForAttr(passcodeVal)}', '${escapeForAttr(item.name || '')}', '${escapeForAttr(roleVal)}')" class="p-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 rounded-lg text-xs">
-                            <i class="fa-solid fa-pen-to-square"></i>
-                        </button>
-                        <button onclick="deleteAllowedUser('${escapeForAttr(item.phone)}')" class="p-1.5 bg-rose-950 hover:bg-rose-900 text-rose-400 rounded-lg text-xs border border-rose-800">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        async function deleteAllowedUser(phone) {
-            if (!supabaseClient) return;
-            if (!confirm(`Xác nhận xoá whitelist cho SĐT ${phone}?`)) return;
-            try {
-                const { error } = await supabaseClient
-                    .from('allowed_users')
-                    .delete()
-                    .eq('phone', phone);
-                if (error) {
-                    showToast(`Lỗi khi xoá: ${error.message}`, '❌');
-                    return;
-                }
-                showToast('Đã xoá khỏi Whitelist!', '🗑️');
-                fetchWhitelistFromSupabase();
-            } catch (err) {
-                showToast('Lỗi khi xoá whitelist!', '❌');
-            }
-        }
-
-        async function handleSaveAllowedUser(e) {
-            e.preventDefault();
-            const phone = document.getElementById('adminUserPhone').value.trim();
-            const passcode = document.getElementById('adminUserPasscode').value.trim();
-            const name = document.getElementById('adminUserName').value.trim();
-            const role = document.getElementById('adminUserRole').value;
-
-            if (!phone || !passcode) {
-                showToast('Vui lòng nhập SĐT và Mật Mã!', '⚠️');
-                return;
-            }
-
-            if (supabaseClient) {
-                try {
-                    const payload = { phone: phone, passcode: passcode, role: role };
-                    if (name) payload.name = name;
-
-                    const { error } = await supabaseClient
-                        .from('allowed_users')
-                        .upsert(payload, { onConflict: 'phone' });
-
-                    if (error) {
-                        showToast(`Lỗi: ${error.message}`, '❌');
-                        return;
-                    }
-
-                    showToast(`Đã lưu ${role.toUpperCase()} cho ${phone}!`, '✅');
-                    resetPasscodeForm();
-                    fetchWhitelistFromSupabase();
-                } catch(err) {
-                    showToast('Lỗi khi lưu mật mã!', '❌');
-                }
-            }
-        }
-
-        function editPasscodeUser(phone, passcode, name, role = 'member') {
-            document.getElementById('adminUserPhone').value = phone;
-            document.getElementById('adminUserPasscode').value = passcode;
-            document.getElementById('adminUserName').value = name;
-            document.getElementById('adminUserRole').value = role;
-            document.getElementById('formPasscodeTitle').innerText = '✏️ Chỉnh Sửa Mật Mã & Role';
-        }
-
-        function resetPasscodeForm() {
-            document.getElementById('adminUserPhone').value = '';
-            document.getElementById('adminUserPasscode').value = '';
-            document.getElementById('adminUserName').value = '';
-            document.getElementById('adminUserRole').value = 'member';
-            document.getElementById('formPasscodeTitle').innerText = '➕ Thêm / Cập Nhật Mật Mã';
-        }
-
-        function openAdminAuthModal() {
-            if (!currentUser) return;
-            if (currentUser.role !== 'admin') {
-                showToast('Tài khoản của bạn không có quyền Admin!', '🚫');
-                return;
-            }
-            document.getElementById('adminMasterKeyInput').value = '';
-            document.getElementById('adminAuthModal').classList.remove('hidden');
-        }
-
-        function closeAdminAuthModal() {
-            document.getElementById('adminAuthModal').classList.add('hidden');
-        }
-
-        function closeAdminModal() {
-            document.getElementById('adminModal').classList.add('hidden');
-        }
-
-        async function handleVerifyAdminMasterKey(e) {
-            e.preventDefault();
-            const key = document.getElementById('adminMasterKeyInput').value.trim();
-            
-            let dbRole = currentUser?.role;
-            let dbPasscode = null;
-
-            if (supabaseClient && currentUser?.phone) {
-                try {
-                    const { data } = await supabaseClient
-                        .from('allowed_users')
-                        .select('role, passcode')
-                        .eq('phone', currentUser.phone)
-                        .maybeSingle();
-                    if (data) {
-                        dbRole = data.role;
-                        dbPasscode = data.passcode;
-                    }
-                } catch(err) {}
-            }
-
-            if (dbRole === 'admin' && key === dbPasscode) {
-                isAdminAuthenticated = true;
-                closeAdminAuthModal();
-                closeProfileModal();
-                document.getElementById('adminModal').classList.remove('hidden');
-                fetchWhitelistFromSupabase();
-                showToast('Đã xác thực quyền Quản trị viên (Admin)!', '👑');
-            } else {
-                showToast('Mật mã Admin không chính xác!', '❌');
-            }
-        }
-
-        function calculateScore() {
-            const winType = parseInt(document.getElementById('calcWinType').value, 10);
-            let flower = parseInt(document.getElementById('calcFlower').value, 10) || 0;
-            const isColor = document.getElementById('calcFlowerColor');
-            const basePoint = parseInt(document.getElementById('calcBasePoint').value, 10) || 10;
-            
-            if (flower >= 7) {
-                isColor.checked = true;      // Tự động tích chọn
-                isColor.disabled = true;     // Khóa checkbox lại không cho bỏ tích
-            } else {
-                isColor.disabled = false;    // Mở khóa nếu số hoa nhỏ hơn 7
-            }
-            // Áp dụng công thức tính hoa tối ưu
-            const hasColorBonus = isColor.checked || flower >= 7;
-            if (flower === 8) {
-                flower = 16;
-            } else if (flower >= 4 && hasColorBonus) {
-                flower += 4; // Viết gọn của: flower = flower + 4
-            }
-
-            // Tính điểm nền dựa trên số hoa mới
-            const otherScore = winType * basePoint + flower * basePoint;
-
-            // Xử lý hiển thị kết quả cho từng trường hợp thắng
-            let totalScore = otherScore * 3;
-            let loserScore = otherScore;
-            let detailText = `Mỗi nhà cùng trả ${otherScore} điểm cho người tới`;
-
-            if (winType === 1) {
-                totalScore += basePoint;
-                loserScore += basePoint;
-                detailText = `Nhà đánh tới trả ${loserScore} điểm, mỗi nhà còn lại trả ${otherScore} điểm cho người tới`;
-            } else if (winType === 2) {
-                totalScore += basePoint * 2;
-                loserScore += basePoint * 2;
-                detailText = `Nhà đánh tới trả ${loserScore} điểm, mỗi nhà còn lại trả ${otherScore} điểm cho người tới`;
-            }
-
-            // Cập nhật giao diện HTML
-            document.getElementById('calcTotalResult').innerText = `${totalScore} Điểm`;
-            document.getElementById('calcDetailText').innerText = detailText;
-        }
-
-        function showToast(message, icon = '🎉') {
-            const toast = document.getElementById('toastNotification');
-            const toastIcon = document.getElementById('toastIcon');
-            const toastMessage = document.getElementById('toastMessage');
-
-            if (!toast) return;
-
-            toastIcon.innerText = icon;
-            toastMessage.innerText = message;
-
-            toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
-            toast.classList.add('opacity-100', 'translate-y-0');
-
-            setTimeout(() => {
-                toast.classList.remove('opacity-100', 'translate-y-0');
-                toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
-            }, 3000);
-        }
-
- // 5. Quản lý Modal Chiêu Mộ & Chia Sẻ
-function openCreateGameModal() {
-            if (!currentUser) {
-                openMandatoryLoginModal();
-                return;
-            }
-
-            const dateSelect = document.getElementById('gameDateSelect');
-            const startSelect = document.getElementById('gameStartTimeSelect');
-            const times = generate30MinIntervals();
-
-            dateSelect.innerHTML = '';
-            const today = new Date();
-            for (let i = 0; i < 7; i++) {
-                const d = new Date(today);
-                d.setDate(today.getDate() + i);
-
-                const year = d.getFullYear();
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const dayNum = String(d.getDate()).padStart(2, '0');
-                const isoDate = `${year}-${month}-${dayNum}`;
-
-                let displayLabel = i === 0 ? `Hôm nay, ${dayNum}/${month}` :
-                                   i === 1 ? `Ngày mai, ${dayNum}/${month}` :
-                                   `${DAYS_VN[d.getDay()]}, ${dayNum}/${month}`;
-
-                const opt = document.createElement('option');
-                opt.value = isoDate;
-                opt.dataset.label = displayLabel;
-                opt.textContent = displayLabel;
-                dateSelect.appendChild(opt);
-            }
-
-            startSelect.innerHTML = '';
-            times.forEach(t => {
-                const opt = document.createElement('option');
-                opt.value = t;
-                opt.textContent = t;
-                startSelect.appendChild(opt);
-            });
-
-            startSelect.value = '19:00';
-            updateEndTimeOptions();
-
-            document.getElementById('createGameModal').classList.remove('hidden');
-        }
-
-function closeCreateGameModal() {
-    const modal = document.getElementById('createGameModal');
-    if (modal) modal.classList.add('hidden');
+    gamesData.unshift(gameObj);
+    closeCreateGameModal();
+    renderGames();
+    renderLeaderboard();
+    playJoinChime();
+    showToast('Tạo kèo thành công!', '🚀');
+    openShareModal(gameId);
 }
 
-function openShareModal(gameId) {
-    if (typeof playTileClickSound === 'function') playTileClickSound();
-    const game = (gamesData || []).find(g => g.id === gameId);
-    const previewEl = document.getElementById('sharePreviewText');
-    
-    if (game && previewEl) {
-        previewEl.innerText = `Trận chơi lúc ${game.time} tại ${game.locationNote}. Hiện có ${game.players ? game.players.length : 0}/4 chân!`;
+function selectLocationType(type) {
+    selectedLocationType = type;
+    const btnOld = document.getElementById('locBtnOld');
+    const btnNew = document.getElementById('locBtnNew');
+    const noteInput = document.getElementById('gameLocationNote');
+
+    if (type === 'Sào Huyệt Cũ') {
+        btnOld.className = "py-2 px-3 border-2 border-amber-400 bg-amber-400 text-red-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow";
+        btnNew.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
+        noteInput.value = "Nơi Tình Yêu Bắt Đầu";
+    } else {
+        btnNew.className = "py-2 px-3 border-2 border-amber-400 bg-amber-400 text-red-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow";
+        btnOld.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
+        noteInput.value = "";
+        noteInput.placeholder = "Nhập mật danh địa điểm mới...";
     }
-    
-    const modal = document.getElementById('shareModal');
-    if (modal) modal.classList.remove('hidden');
 }
 
-function closeShareModal() {
-    const modal = document.getElementById('shareModal');
-    if (modal) modal.classList.add('hidden');
-}
-
-function copyShareLink() {
-    const previewEl = document.getElementById('sharePreviewText');
-    const textToCopy = previewEl ? previewEl.innerText : '';
-
-    if (textToCopy) {
-        navigator.clipboard.writeText(textToCopy);
-        if (typeof showToast === 'function') showToast('Đã copy nội dung!', '📋');
-    }
-    
-    closeShareModal();
-}
-
-        function simulateZaloShare() {
-            showToast('Đang mở ứng dụng Zalo...', '📱');
-            closeShareModal();
-        }
-
-        function openReserveModal() {
-            document.getElementById('reserveModal').classList.remove('hidden');
-        }
-
-        function closeReserveModal() {
-            document.getElementById('reserveModal').classList.add('hidden');
-        }
-
-        function acceptReserveAndCreateNew() {
-            closeReserveModal();
-            openCreateGameModal();
-        }
-
-        async function renderLeaderboard() {
-    const container = document.getElementById('leaderboardList');
-    if (!container) return;
-
-    let users = [];
-    let games = gamesData || [];
-
-    // 1. Lấy dữ liệu thật từ Supabase nếu có kết nối
-    if (supabaseClient) {
-        try {
-            // Lấy toàn bộ thành viên trong bảng allowed_users
-            const { data: usersData } = await supabaseClient
-                .from('allowed_users')
-                .select('phone, name');
-            if (usersData && usersData.length > 0) users = usersData;
-
-            // Lấy danh sách tay bài của tất cả các kèo trong bảng games
-            const { data: fetchGames } = await supabaseClient
-                .from('games')
-                .select('players');
-            if (fetchGames && fetchGames.length > 0) games = fetchGames;
-        } catch (err) {
-            console.error('Lỗi khi tải dữ liệu Bảng vàng:', err);
-        }
-    }
-
-    // Fallback: Tự gom danh sách user từ các kèo hiện có nếu CSDL chưa có danh sách thành viên
-    if (users.length === 0) {
-        const phoneMap = new Map();
-        games.forEach(g => {
-            (g.players || []).forEach(p => {
-                if (p.phone && !phoneMap.has(p.phone)) {
-                    phoneMap.set(p.phone, p.name || p.phone);
-                }
-            });
-        });
-        phoneMap.forEach((name, phone) => users.push({ phone, name }));
-    }
-
-    // 2. Tính tổng số trận mỗi user đã tham gia (trong mảng players)
-    const stats = users.map(user => {
-        const totalPlayed = games.reduce((count, game) => {
-            const joined = (game.players || []).some(p => p.phone === user.phone || p.name === user.name);
-            return joined ? count + 1 : count;
-        }, 0);
-
-        return {
-            name: user.name || user.phone,
-            phone: user.phone,
-            count: totalPlayed
-        };
-    });
-
-    // 3. Sắp xếp giảm dần theo số trận (Top xuống dưới)
-    stats.sort((a, b) => b.count - a.count);
-
-    if (stats.length === 0) {
-        container.innerHTML = `<div class="text-center text-slate-400 py-4">Chưa có dữ liệu thành viên nào.</div>`;
-        return;
-    }
-
-    // 4. Render danh sách đầy đủ tất cả thành viên
-    container.innerHTML = stats.map((item, index) => {
-        const rank = index + 1;
-        let rankTag = '';
-        let rowStyle = '';
-        let badgeStyle = '';
-
-        if (rank === 1) {
-            rankTag = '🥇 1.';
-            rowStyle = 'bg-amber-100 border-amber-300 text-amber-950 font-bold';
-            badgeStyle = 'bg-amber-400 text-red-950 font-black';
-        } else if (rank === 2) {
-            rankTag = '🥈 2.';
-            rowStyle = 'bg-slate-100 border-slate-300 text-slate-800 font-bold';
-            badgeStyle = 'bg-slate-300 text-slate-800 font-black';
-        } else if (rank === 3) {
-            rankTag = '🥉 3.';
-            rowStyle = 'bg-amber-50/60 border-amber-200 text-amber-900 font-bold';
-            badgeStyle = 'bg-amber-200 text-amber-900 font-black';
-        } else {
-            rankTag = `<span class="inline-block w-5 text-center text-slate-400 font-bold">#${rank}</span>`;
-            rowStyle = 'bg-white border-slate-200 text-slate-700 font-medium';
-            badgeStyle = 'bg-slate-100 text-slate-600 border border-slate-200 font-bold';
-        }
-
-        return `
-            <div class="${rowStyle} p-2.5 rounded-xl border flex items-center justify-between shadow-sm transition-all">
-                <div class="flex items-center gap-2 overflow-hidden">
-                    <span class="min-w-[2rem] text-xs">${rankTag}</span>
-                    <span class="truncate">${item.name}</span>
-                </div>
-                <span class="${badgeStyle} px-2.5 py-0.5 rounded-md text-xs shrink-0">
-                    ${item.count} Trận
-                </span>
-            </div>
-        `;
-    }).join('');
-}
-
-// Biến lưu ván bài đang xem chi tiết
-let currentDetailGameId = null;
-
-// 1. Mở Popup chi tiết kèo theo ID
+// =====================================================================
+// CHI TIẾT KÈO (popup) + CHIA SẺ QUA URL ?gameId=
+// =====================================================================
 function openGameDetailModal(gameId) {
-    if (typeof playTileClickSound === 'function') playTileClickSound();
+    playTileClickSound();
 
     currentDetailGameId = gameId;
-    const game = (typeof gamesData !== 'undefined' ? gamesData : []).find(g => g.id === gameId);
+    const game = (gamesData || []).find(g => g.id === gameId);
     const container = document.getElementById('gameDetailContent');
     const modal = document.getElementById('gameDetailModal');
 
     if (!modal || !container) return;
     if (!game) {
-        if (typeof showToast === 'function') showToast('Không tìm thấy ván bài này!', '⚠️');
+        showToast('Không tìm thấy ván bài này!', '⚠️');
         return;
     }
 
@@ -2451,35 +1828,17 @@ function openGameDetailModal(gameId) {
     const isUserInSub = currentUser && game.substitutes?.some(s => s.phone === currentUser.phone);
     const isUserInGame = isUserInMain || isUserInSub;
 
-    // Badge trạng thái
     let statusBadgeHtml = '';
     if (expired) {
         statusBadgeHtml = `<span class="bg-slate-100 text-slate-600 border-slate-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Đã Hết Hạn</span>`;
     } else {
-        statusBadgeHtml = isFull 
+        statusBadgeHtml = isFull
             ? `<span class="bg-red-100 text-red-700 border-red-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Đủ 4 Chân</span>`
             : `<span class="bg-emerald-100 text-emerald-800 border-emerald-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Còn ${4 - activePlayerCount} Chỗ</span>`;
     }
 
-    // Nút bấm hành động trong Modal
-    let actionButtonHtml = '';
-    if (expired) {
-        actionButtonHtml = `<div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">⏳ Kèo đã hết hạn</div>`;
-    } else if (isUserInGame) {
-        actionButtonHtml = `
-            <button onclick="leaveGame('${game.id}'); closeGameDetailModal();" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
-                <i class="fa-solid fa-door-open"></i>
-                <span>${isUserInSub ? 'Hủy Đăng Ký Dự Bị' : 'Rời Bàn'}</span>
-            </button>`;
-    } else {
-        actionButtonHtml = `
-            <button onclick="joinGame('${game.id}'); closeGameDetailModal();" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
-                <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
-                <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
-            </button>`;
-    }
+    const actionButtonHtml = buildGameActionButtonHtml(game, expired, isFull, isUserInGame, isUserInSub, false);
 
-    // Gán HTML vào Modal
     container.innerHTML = `
         <div class="bg-white rounded-2xl border-2 ${expired ? 'border-slate-300' : 'border-amber-400'} p-4 shadow-sm space-y-3 relative overflow-hidden">
             <div class="flex items-center justify-between border-b border-amber-100 pb-2">
@@ -2489,7 +1848,7 @@ function openGameDetailModal(gameId) {
                         <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
                             <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time || 'Chưa xếp giờ'}
                         </h3>
-                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${game.locationNote || 'Địa điểm quen thuộc'}</p>
+                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${escapeHtml(game.locationNote || 'Địa điểm quen thuộc')}</p>
                     </div>
                 </div>
                 ${statusBadgeHtml}
@@ -2498,7 +1857,7 @@ function openGameDetailModal(gameId) {
             ${game.note ? `
             <div class="text-[11px] text-slate-600 bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200/60 flex items-center gap-1.5 italic">
                 <i class="fa-solid fa-comment-dots text-amber-600 text-xs"></i>
-                <span>"${game.note}"</span>
+                <span>"${escapeHtml(game.note)}"</span>
             </div>` : ''}
 
             <div>
@@ -2520,57 +1879,29 @@ function openGameDetailModal(gameId) {
     modal.classList.remove('hidden');
 }
 
-// Hàm đóng Modal Chi Tiết Ván Bài
 function closeGameDetailModal() {
     const modal = document.getElementById('gameDetailModal');
     if (modal) modal.classList.add('hidden');
     currentDetailGameId = null;
 }
 
-// Tự động kiểm tra param gameId trên URL khi tải trang
-function checkUrlForGameId() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetGameId = urlParams.get('gameId');
-
-    if (targetGameId) {
-        // Đợi gamesData load xong rồi mới mở popup
-        setTimeout(() => {
-            openGameDetailModal(targetGameId);
-        }, 500);
-    }
-}
-// Hàm đóng Modal Chi Tiết Ván Bài
-function closeGameDetailModal() {
-    const modal = document.getElementById('gameDetailModal');
-    if (modal) modal.classList.add('hidden');
-    currentDetailGameId = null;
+function getGameShareUrl(gameId) {
+    const url = new URL(window.location.href);
+    if (gameId) url.searchParams.set('gameId', gameId);
+    return url.toString();
 }
 
-// Tự động kiểm tra param gameId trên URL khi tải trang
-function checkUrlForGameId() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const targetGameId = urlParams.get('gameId');
-
-    if (targetGameId) {
-        // Đợi gamesData load xong rồi mới mở popup
-        setTimeout(() => {
-            openGameDetailModal(targetGameId);
-        }, 500);
-    }
-}
 function openShareModal(gameId) {
-    if (typeof playTileClickSound === 'function') playTileClickSound();
-    
-    // 1. Lưu lại gameId hiện tại
-    currentShareGameId = gameId; 
+    playTileClickSound();
+    currentShareGameId = gameId;
 
     const game = (gamesData || []).find(g => g.id === gameId);
     const previewEl = document.getElementById('sharePreviewText');
-    
+
     if (game && previewEl) {
         previewEl.innerText = `Trận chơi lúc ${game.time} tại ${game.locationNote}. Hiện có ${game.players ? game.players.length : 0}/4 chân!`;
     }
-    
+
     const modal = document.getElementById('shareModal');
     if (modal) modal.classList.remove('hidden');
 
@@ -2580,72 +1911,514 @@ function openShareModal(gameId) {
 function closeShareModal() {
     const modal = document.getElementById('shareModal');
     if (modal) modal.classList.add('hidden');
-    currentShareGameId = null; // Reset lại khi đóng modal
-}
-
-// Hàm hỗ trợ tạo URL chứa tham số gameId
-function getGameShareUrl(gameId) {
-    const url = new URL(window.location.href);
-    if (gameId) {
-        url.searchParams.set('gameId', gameId);
-    }
-    return url.toString();
+    currentShareGameId = null;
 }
 
 function copyShareLink() {
     if (!currentShareGameId) return;
-
-    // Tạo link chứa ?gameId=xxx
     const shareUrl = getGameShareUrl(currentShareGameId);
-    
     navigator.clipboard.writeText(`🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${shareUrl}`);
-    if (typeof showToast === 'function') showToast('Đã copy link rủ cạ cứng!', '📋');
+    showToast('Đã copy link rủ cạ cứng!', '📋');
     closeShareModal();
 }
 
 function simulateZaloShare() {
     if (!currentShareGameId) return;
-
     const shareUrl = getGameShareUrl(currentShareGameId);
     const shareText = `🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${shareUrl}`;
 
-    // Tự động copy link vào clipboard cho người dùng khi chia sẻ qua Zalo
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareText);
-    }
+    if (navigator.clipboard) navigator.clipboard.writeText(shareText);
 
-    if (typeof showToast === 'function') showToast('Đã copy link & mở Zalo...', '📱');
+    showToast('Đã copy link & mở Zalo...', '📱');
     closeShareModal();
 }
-// Khởi chạy hàm kiểm tra URL khi DOM sẵn sàng
-let hasCheckedUrlOnLoad = false;
 
+// Kiểm tra ?gameId= (hoặc ?id=) trên URL để tự mở popup chi tiết kèo tương ứng.
+// Hỗ trợ linh hoạt các định dạng: G684, 684, #G684
 function checkAndOpenGameFromUrl() {
     const urlParams = new URLSearchParams(window.location.search);
     const rawGameId = urlParams.get('gameId') || urlParams.get('id');
-
     if (!rawGameId) return;
 
-    const allGames = typeof gamesData !== 'undefined' ? gamesData : [];
     const targetId = String(rawGameId).trim().toUpperCase();
-
-    // Tìm game linh hoạt (hỗ trợ cả G684, 684, #G684)
-    const foundGame = allGames.find(g => {
+    const foundGame = (gamesData || []).find(g => {
         const idStr = String(g.id).trim().toUpperCase();
         return idStr === targetId || idStr === targetId.replace(/^G/, '') || `G${idStr}` === targetId;
     });
 
     if (foundGame) {
-        // Dùng setTimeout 100ms để chắc chắn DOM giao diện đã vẽ xong
-        setTimeout(() => {
-            openGameDetailModal(foundGame.id);
-        }, 100);
-    } else if (typeof showToast === 'function') {
+        setTimeout(() => openGameDetailModal(foundGame.id), 100);
+    } else {
         showToast(`Không tìm thấy kèo #${rawGameId}!`, '⚠️');
     }
 }
 
+// =====================================================================
+// GHẾ DỰ BỊ
+// =====================================================================
+function openReserveModal() {
+    document.getElementById('reserveModal').classList.remove('hidden');
+}
 
+function closeReserveModal() {
+    document.getElementById('reserveModal').classList.add('hidden');
+}
+
+function acceptReserveAndCreateNew() {
+    closeReserveModal();
+    openCreateGameModal();
+}
+
+// =====================================================================
+// TÁM CHUYỆN / ẢNH
+// =====================================================================
+async function handleImageSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const options = { maxSizeMB: 0.5, maxWidthOrHeight: 800 };
+
+    try {
+        currentPostImageFile = await imageCompression(file, options);
+        showToast('Tải ảnh thành công!');
+    } catch (error) {
+        showToast('Nén ảnh thất bại!');
+        console.error(error);
+    }
+
+    const reader = new FileReader();
+    reader.onload = function (event) {
+        currentPostImageData = event.target.result;
+        document.getElementById('imagePreview').src = currentPostImageData;
+        document.getElementById('imagePreviewContainer').classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeImagePreview() {
+    currentPostImageData = null;
+    currentPostImageFile = null;
+    document.getElementById('imagePreview').src = '';
+    document.getElementById('imagePreviewContainer').classList.add('hidden');
+    document.getElementById('chatImageInput').value = '';
+}
+
+async function uploadImageToSupabaseStorage(file) {
+    if (!supabaseClient || !file) return null;
+
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `mahjong_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+        const filePath = `posts/${fileName}`;
+
+        showToast('Đang tải ảnh lên Supabase Storage...', '☁️');
+
+        const { error } = await supabaseClient.storage.from('mahjong-photos').upload(filePath, file, { cacheControl: '3600', upsert: true });
+        if (error) return null;
+
+        const { data: publicUrlData } = supabaseClient.storage.from('mahjong-photos').getPublicUrl(filePath);
+        return publicUrlData ? publicUrlData.publicUrl : null;
+    } catch (err) {
+        return null;
+    }
+}
+
+async function handleCreatePost() {
+    if (!currentUser) {
+        showToast('🔒 Bạn cần đăng nhập để đăng bài!', '⚠️');
+        openMandatoryLoginModal();
+        return;
+    }
+
+    const textInput = document.getElementById('chatInputText');
+    const contentText = textInput.value.trim();
+
+    if (!contentText && !currentPostImageData) {
+        showToast('Vui lòng nhập nội dung hoặc đính kèm ảnh!', '⚠️');
+        return;
+    }
+
+    let finalImageUrl = currentPostImageData;
+    if (currentPostImageFile) {
+        const storageUrl = await uploadImageToSupabaseStorage(currentPostImageFile);
+        if (storageUrl) finalImageUrl = storageUrl;
+    }
+
+    const postPayload = {
+        id: 'POST_' + Date.now(),
+        author: currentUser.name,
+        text: contentText,
+        image_url: finalImageUrl,
+        likes: 0
+    };
+
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient.from('posts').insert([postPayload]);
+            if (error) {
+                console.error('Lỗi khi đăng bài lên Supabase:', error);
+                showToast(`❌ Không đăng được bài: ${error.message}`, '⚠️');
+                return;
+            }
+        } catch (err) {
+            console.error('Lỗi khi đăng bài (exception):', err);
+            showToast(`❌ Lỗi kết nối Supabase: ${err.message || err}`, '⚠️');
+            return;
+        }
+    }
+
+    textInput.value = '';
+    removeImagePreview();
+    fetchPostsFromSupabase();
+    showToast('Đã đăng bài thành công!', '🎉');
+}
+
+async function toggleLikePost(postId) {
+    playTileClickSound();
+    const post = chatPostsData.find(p => p.id === postId);
+    if (!post) return;
+
+    post.isLiked = !post.isLiked;
+    post.likes += post.isLiked ? 1 : -1;
+    renderChatPosts();
+
+    if (supabaseClient) {
+        try {
+            await supabaseClient.from('posts').update({ likes: post.likes }).eq('id', postId);
+        } catch (err) {}
+    }
+}
+
+function renderChatPosts() {
+    const container = document.getElementById('chatFeedList');
+    if (!container) return;
+
+    if (chatPostsData.length === 0) {
+        container.innerHTML = `
+            <div class="bg-white rounded-2xl p-6 text-center text-slate-400 border border-slate-200">
+                <i class="fa-regular fa-comments text-3xl mb-2 text-slate-300 block"></i>
+                <p class="text-xs font-bold">Chưa có bài viết nào. Hãy là người mở bát!</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = chatPostsData.map(post => {
+        const imageHtml = post.image ? `<img src="${post.image}" alt="Post image" class="w-full rounded-xl max-h-60 object-cover my-2 border border-slate-100" onerror="this.style.display='none'">` : '';
+        return `
+            <div class="bg-white rounded-2xl border border-amber-200 p-3.5 shadow-sm space-y-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-red-950 font-black flex items-center justify-center text-xs shadow">🀄</div>
+                        <div>
+                            <span class="text-xs font-bold text-slate-800 block leading-tight">${escapeHtml(post.author)}</span>
+                            <span class="text-[10px] text-slate-400 font-semibold">${post.timeAgo}</span>
+                        </div>
+                    </div>
+                </div>
+                ${post.text ? `<p class="text-xs text-slate-700 font-medium whitespace-pre-wrap">${escapeHtml(post.text)}</p>` : ''}
+                ${imageHtml}
+                <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
+                    <button onclick="toggleLikePost('${post.id}')" class="flex items-center gap-1.5 font-bold ${post.isLiked ? 'text-rose-600' : 'text-slate-500 hover:text-rose-600'} transition">
+                        <i class="${post.isLiked ? 'fa-solid' : 'fa-regular'} fa-heart"></i>
+                        <span>${post.likes} Yêu thích</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// =====================================================================
+// QUẢN TRỊ WHITELIST
+// =====================================================================
+function renderAdminWhitelist() {
+    const container = document.getElementById('adminWhitelistContainer');
+    if (!container) return;
+
+    if (whitelistData.length === 0) {
+        container.innerHTML = `
+            <div class="p-4 text-center text-xs text-amber-200/50 bg-slate-950 rounded-xl border border-dashed border-amber-500/20">
+                Chưa có dữ liệu từ Supabase. Hãy thêm SĐT & Mật Mã mới ở trên!
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = whitelistData.map(item => {
+        const passcodeVal = item.passcode || item.secret_code;
+        const roleVal = item.role || 'member';
+        const isOnline = activeOnlinePhones.has(item.phone);
+
+        return `
+            <div class="bg-slate-950 p-3 rounded-xl border border-amber-500/30 flex items-center justify-between text-xs">
+                <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
+                        <span class="font-mono font-bold text-amber-300 text-sm">${escapeHtml(item.phone)}</span>
+                        <span class="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-mono font-bold text-[10px] border border-amber-500/30">Mật mã: ${escapeHtml(passcodeVal)}</span>
+                        <span class="${roleVal === 'admin' ? 'bg-amber-400 text-red-950 font-black' : 'bg-slate-800 text-slate-300'} px-2 py-0.5 rounded font-bold text-[9px] uppercase">${roleVal}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 font-semibold pl-4.5">${escapeHtml(item.name || 'Chưa đặt biệt danh')} <span class="text-[10px] ${isOnline ? 'text-emerald-400' : 'text-slate-500'}">(${isOnline ? '🟢 Online' : '⚪ Offline'})</span></p>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button onclick="editPasscodeUser('${escapeForAttr(item.phone)}', '${escapeForAttr(passcodeVal)}', '${escapeForAttr(item.name || '')}', '${escapeForAttr(roleVal)}')" class="p-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 rounded-lg text-xs">
+                        <i class="fa-solid fa-pen-to-square"></i>
+                    </button>
+                    <button onclick="deleteAllowedUser('${escapeForAttr(item.phone)}')" class="p-1.5 bg-rose-950 hover:bg-rose-900 text-rose-400 rounded-lg text-xs border border-rose-800">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function deleteAllowedUser(phone) {
+    if (!supabaseClient) return;
+    if (!confirm(`Xác nhận xoá whitelist cho SĐT ${phone}?`)) return;
+
+    try {
+        const { error } = await supabaseClient.from('allowed_users').delete().eq('phone', phone);
+        if (error) {
+            showToast(`Lỗi khi xoá: ${error.message}`, '❌');
+            return;
+        }
+        showToast('Đã xoá khỏi Whitelist!', '🗑️');
+        fetchWhitelistFromSupabase();
+    } catch (err) {
+        showToast('Lỗi khi xoá whitelist!', '❌');
+    }
+}
+
+async function handleSaveAllowedUser(e) {
+    e.preventDefault();
+    const phone = document.getElementById('adminUserPhone').value.trim();
+    const passcode = document.getElementById('adminUserPasscode').value.trim();
+    const name = document.getElementById('adminUserName').value.trim();
+    const role = document.getElementById('adminUserRole').value;
+
+    if (!phone || !passcode) {
+        showToast('Vui lòng nhập SĐT và Mật Mã!', '⚠️');
+        return;
+    }
+
+    if (supabaseClient) {
+        try {
+            const payload = { phone, passcode, role };
+            if (name) payload.name = name;
+
+            const { error } = await supabaseClient.from('allowed_users').upsert(payload, { onConflict: 'phone' });
+            if (error) {
+                showToast(`Lỗi: ${error.message}`, '❌');
+                return;
+            }
+
+            showToast(`Đã lưu ${role.toUpperCase()} cho ${phone}!`, '✅');
+            resetPasscodeForm();
+            fetchWhitelistFromSupabase();
+        } catch (err) {
+            showToast('Lỗi khi lưu mật mã!', '❌');
+        }
+    }
+}
+
+function editPasscodeUser(phone, passcode, name, role = 'member') {
+    document.getElementById('adminUserPhone').value = phone;
+    document.getElementById('adminUserPasscode').value = passcode;
+    document.getElementById('adminUserName').value = name;
+    document.getElementById('adminUserRole').value = role;
+    document.getElementById('formPasscodeTitle').innerText = '✏️ Chỉnh Sửa Mật Mã & Role';
+}
+
+function resetPasscodeForm() {
+    document.getElementById('adminUserPhone').value = '';
+    document.getElementById('adminUserPasscode').value = '';
+    document.getElementById('adminUserName').value = '';
+    document.getElementById('adminUserRole').value = 'member';
+    document.getElementById('formPasscodeTitle').innerText = '➕ Thêm / Cập Nhật Mật Mã';
+}
+
+function openAdminAuthModal() {
+    if (!currentUser) return;
+    if (currentUser.role !== 'admin') {
+        showToast('Tài khoản của bạn không có quyền Admin!', '🚫');
+        return;
+    }
+    document.getElementById('adminMasterKeyInput').value = '';
+    document.getElementById('adminAuthModal').classList.remove('hidden');
+}
+
+function closeAdminAuthModal() {
+    document.getElementById('adminAuthModal').classList.add('hidden');
+}
+
+function closeAdminModal() {
+    document.getElementById('adminModal').classList.add('hidden');
+}
+
+async function handleVerifyAdminMasterKey(e) {
+    e.preventDefault();
+    const key = document.getElementById('adminMasterKeyInput').value.trim();
+
+    let dbRole = currentUser?.role;
+    let dbPasscode = null;
+
+    if (supabaseClient && currentUser?.phone) {
+        try {
+            const { data } = await supabaseClient
+                .from('allowed_users')
+                .select('role, passcode')
+                .eq('phone', currentUser.phone)
+                .maybeSingle();
+            if (data) {
+                dbRole = data.role;
+                dbPasscode = data.passcode;
+            }
+        } catch (err) {}
+    }
+
+    if (dbRole === 'admin' && key === dbPasscode) {
+        isAdminAuthenticated = true;
+        closeAdminAuthModal();
+        closeProfileModal();
+        document.getElementById('adminModal').classList.remove('hidden');
+        fetchWhitelistFromSupabase();
+        showToast('Đã xác thực quyền Quản trị viên (Admin)!', '👑');
+    } else {
+        showToast('Mật mã Admin không chính xác!', '❌');
+    }
+}
+
+// =====================================================================
+// BẢNG VÀNG - xếp hạng toàn bộ thành viên theo số kèo đã tham gia
+// FIX: trước đây hàm này tự fetch lại Supabase mỗi lần mở tab (trùng lặp
+// với fetchGamesFromSupabase/fetchWhitelistFromSupabase đã đồng bộ realtime
+// sẵn). Giờ tái sử dụng thẳng state `gamesData` / `whitelistData` đang có,
+// vừa nhanh hơn vừa tránh gọi Supabase 2 lần cho cùng một dữ liệu.
+// =====================================================================
+function computeParticipationStats() {
+    const statsByPhone = {};
+
+    // Khởi tạo từ Whitelist trước để hiện đủ mọi thành viên, kể cả 0 trận
+    (whitelistData || []).forEach(u => {
+        if (!u || !u.phone) return;
+        statsByPhone[u.phone] = { phone: u.phone, name: u.name || u.phone, count: 0 };
+    });
+
+    // Đếm số lần góp mặt trong danh sách "players" (tay bài chính thức) của TẤT CẢ các kèo
+    (gamesData || []).forEach(game => {
+        (game.players || []).forEach(p => {
+            if (!p || !p.phone) return;
+            if (!statsByPhone[p.phone]) {
+                statsByPhone[p.phone] = { phone: p.phone, name: p.name || p.phone, count: 0 };
+            }
+            statsByPhone[p.phone].count += 1;
+            if (p.name) statsByPhone[p.phone].name = p.name; // luôn lấy biệt danh mới nhất
+        });
+    });
+
+    // Nếu chưa có Whitelist nào (CSDL mới tinh), vẫn hiện được người đã từng tham gia kèo
+    return Object.values(statsByPhone).sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.name.localeCompare(b.name, 'vi');
+    });
+}
+
+function renderLeaderboard() {
+    const container = document.getElementById('leaderboardList');
+    if (!container) return;
+
+    const stats = computeParticipationStats();
+
+    if (stats.length === 0) {
+        container.innerHTML = `<div class="text-center text-slate-400 text-xs py-6">Chưa có dữ liệu thành viên. Hãy thêm Whitelist hoặc tạo/tham gia kèo đầu tiên!</div>`;
+        return;
+    }
+
+    const medalFor = (rank) => rank === 0 ? '🥇' : rank === 1 ? '🥈' : rank === 2 ? '🥉' : `#${rank + 1}`;
+    const rowClassFor = (rank) => rank === 0 ? 'bg-amber-50 border-amber-200' :
+                                   rank === 1 ? 'bg-slate-50 border-slate-200' :
+                                   rank === 2 ? 'bg-amber-50/50 border-amber-100' :
+                                   'bg-white border-slate-100';
+    const badgeClassFor = (rank) => rank < 3 ? 'bg-amber-400 text-red-950' : 'bg-slate-200 text-slate-800';
+
+    container.innerHTML = stats.map((s, idx) => {
+        const isMe = currentUser && s.phone === currentUser.phone;
+        return `
+            <div class="${rowClassFor(idx)} p-2.5 rounded-xl border flex items-center justify-between gap-2 ${isMe ? 'ring-2 ring-amber-400' : ''}">
+                <span class="text-slate-800 font-bold truncate">
+                    ${medalFor(idx)} ${escapeHtml(s.name)}${isMe ? ' <span class="text-[9px] text-amber-600 font-black">(Bạn)</span>' : ''}
+                </span>
+                <span class="${badgeClassFor(idx)} font-black px-2 py-0.5 rounded-md whitespace-nowrap shrink-0">${s.count} Trận</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// =====================================================================
+// BẢNG TÍNH ĐIỂM
+// =====================================================================
+function calculateScore() {
+    const winType = parseInt(document.getElementById('calcWinType').value, 10);
+    let flower = parseInt(document.getElementById('calcFlower').value, 10) || 0;
+    const isColor = document.getElementById('calcFlowerColor');
+    const basePoint = parseInt(document.getElementById('calcBasePoint').value, 10) || 10;
+
+    if (flower >= 7) {
+        isColor.checked = true;
+        isColor.disabled = true;
+    } else {
+        isColor.disabled = false;
+    }
+
+    const hasColorBonus = isColor.checked || flower >= 7;
+    if (flower === 8) {
+        flower = 16;
+    } else if (flower >= 4 && hasColorBonus) {
+        flower += 4;
+    }
+
+    const otherScore = winType * basePoint + flower * basePoint;
+
+    let totalScore = otherScore * 3;
+    let loserScore = otherScore;
+    let detailText = `Mỗi nhà cùng trả ${otherScore} điểm cho người tới`;
+
+    if (winType === 1) {
+        totalScore += basePoint;
+        loserScore += basePoint;
+        detailText = `Nhà đánh tới trả ${loserScore} điểm, mỗi nhà còn lại trả ${otherScore} điểm cho người tới`;
+    } else if (winType === 2) {
+        totalScore += basePoint * 2;
+        loserScore += basePoint * 2;
+        detailText = `Nhà đánh tới trả ${loserScore} điểm, mỗi nhà còn lại trả ${otherScore} điểm cho người tới`;
+    }
+
+    document.getElementById('calcTotalResult').innerText = `${totalScore} Điểm`;
+    document.getElementById('calcDetailText').innerText = detailText;
+}
+
+// =====================================================================
+// TOAST THÔNG BÁO
+// =====================================================================
+function showToast(message, icon = '🎉') {
+    const toast = document.getElementById('toastNotification');
+    const toastIcon = document.getElementById('toastIcon');
+    const toastMessage = document.getElementById('toastMessage');
+    if (!toast) return;
+
+    toastIcon.innerText = icon;
+    toastMessage.innerText = message;
+
+    toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
+    toast.classList.add('opacity-100', 'translate-y-0');
+
+    setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-[-20px]');
+    }, 3000);
+}
     </script>
 </body>
 </html>
