@@ -2576,16 +2576,10 @@ function checkAndOpenGameFromUrl() {
             openGameDetailModal(foundGame.id);
         }, 100);
     } else if (typeof showToast === 'function') {
-        showToast(`Không tìm thấy bàn bài #${rawGameId}!`, '⚠️');
+        showToast(`Không tìm thấy kèo #${rawGameId}!`, '⚠️');
     }
 }
-async function initApp() {
-    renderGames();
-    checkAndOpenGameFromUrl();
-}
 
-// Chạy khi trang bắt đầu
-document.addEventListener('DOMContentLoaded', initApp);
 
     </script>
 </body>
