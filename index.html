@@ -39,8 +39,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
 
-    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/12.18.0/firebase-analytics.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
     
     <script>
         tailwind.config = {
@@ -786,6 +786,7 @@ function initFirebaseMessaging() {
     }
     try {
         firebase.initializeApp(FIREBASE_CONFIG);
+        firebase.analytics();
         fcmMessaging = firebase.messaging();
 
         // Nhận thông báo khi app đang MỞ (foreground) - lúc này Service Worker không tự hiện notification native,
