@@ -659,6 +659,26 @@
             </div>
         </div>
 
+        <!-- MODAL CHI TIẾT VÁN BÀI -->
+        <div id="gameDetailModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+            <div class="bg-white rounded-3xl border-4 border-amber-500 w-full max-w-sm p-5 shadow-2xl relative">
+                <button onclick="closeGameDetailModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-xl text-amber-700 font-bold">🀄</div>
+                    <div>
+                        <h3 class="font-display text-lg font-bold text-slate-800">Chi Tiết Ván Bài</h3>
+                        <p class="text-xs text-slate-500">Thông tin sào huyệt & tay bài</p>
+                    </div>
+                </div>
+
+                <!-- Khung chứa thông tin ván bài sẽ được render động bằng JS -->
+                <div id="gameDetailContent">
+                    <div class="text-center text-slate-400 text-xs py-6">Đang tải thông tin ván bài...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- TOAST NOTIFICATION -->
         <div id="toastNotification" class="fixed top-5 left-1/2 -translate-x-1/2 bg-slate-900 text-white border-2 border-amber-400 px-4 py-2.5 rounded-2xl shadow-2xl z-50 flex items-center gap-2 text-xs font-bold transition-all duration-300 opacity-0 pointer-events-none translate-y-[-20px]">
             <span id="toastIcon">🎉</span>
@@ -889,7 +909,7 @@ function toggleShowExpiredGames() {
                 }
                 renderGames();
             } catch (err) {
-                if (gamesData.length === 0) gamesData = [...initialDemoGames];
+                if (gamesData.length === 0) gamesData = [];
                 renderGames();
             }
         }
@@ -1313,6 +1333,34 @@ function toggleShowExpiredGames() {
 function escapeForAttr(str) {
     return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
+function renderPlayersHtml(players = [], substitutes = []) {
+    const activeCount = players.length;
+    let html = players.map(p => {
+        const isOnline = typeof activeOnlinePhones !== 'undefined' && activeOnlinePhones.has(p.phone);
+        return `
+            <div class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-[11px] flex items-center gap-1.5 shadow-sm">
+                <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
+                <span>🀄 ${p.name || p.phone}</span>
+            </div>`;
+    }).join('');
+
+    for (let i = activeCount; i < 4; i++) {
+        html += `
+            <div class="bg-slate-100 border border-dashed border-slate-300 text-slate-400 font-bold px-2 py-1 rounded-xl text-[11px]">
+                Ghế Trống #${i + 1}
+            </div>`;
+    }
+
+    if (substitutes.length > 0) {
+        html += `
+            <div class="w-full mt-2 text-[11px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200 flex items-center gap-1 font-bold">
+                <span>🪑 Dự bị:</span>
+                <span>${substitutes.map(s => s.name || s.phone).join(', ')}</span>
+            </div>`;
+    }
+
+    return html;
+}
 
 // 2. Hàm Render Danh Sách Kèo Phỏng Bài
 function renderGames() {
@@ -1320,42 +1368,35 @@ function renderGames() {
     const countEl = document.getElementById('activeGamesCount');
     if (!container) return;
 
-    // Lọc kèo dựa theo biến showExpiredGames
-    const filteredGames = (gamesData || []).filter(game => {
-        const expired = isGameExpired(game);
-        if (!showExpiredGames && expired) return false;
-        return true;
-    });
-
-    const activeCount = (gamesData || []).filter(g => !isGameExpired(g)).length;
-    const expiredCount = (gamesData || []).filter(g => isGameExpired(g)).length;
+    const allGames = gamesData || [];
+    const activeCount = allGames.filter(g => !isGameExpired(g)).length;
+    const expiredCount = allGames.length - activeCount;
 
     if (countEl) countEl.innerText = `${activeCount} Kèo Hot`;
-
     container.innerHTML = '';
 
-    // Nút Bật/Tắt xem kèo đã qua
+    // Thanh bật/tắt xem kèo cũ
     if (expiredCount > 0) {
-        const toggleBar = document.createElement('div');
-        toggleBar.className = "flex justify-between items-center bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 mb-3 border border-slate-200";
-        toggleBar.innerHTML = `
-            <span>Có ${expiredCount} kèo đã qua thời gian</span>
-            <button onclick="toggleShowExpiredGames()" class="text-amber-700 underline hover:text-amber-800">
-                ${showExpiredGames ? 'Ẩn kèo cũ' : 'Xem kèo đã qua'}
-            </button>
-        `;
-        container.appendChild(toggleBar);
+        container.insertAdjacentHTML('beforeend', `
+            <div class="flex justify-between items-center bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 mb-3 border border-slate-200">
+                <span>Có ${expiredCount} kèo đã qua thời gian</span>
+                <button onclick="toggleShowExpiredGames()" class="text-amber-700 underline hover:text-amber-800">
+                    ${showExpiredGames ? 'Ẩn kèo cũ' : 'Xem kèo đã qua'}
+                </button>
+            </div>
+        `);
     }
 
+    const filteredGames = allGames.filter(game => showExpiredGames || !isGameExpired(game));
+
     if (filteredGames.length === 0) {
-        const emptyState = document.createElement('div');
-        emptyState.className = "bg-white rounded-2xl border-2 border-dashed border-amber-300 p-8 text-center text-slate-500 space-y-2";
-        emptyState.innerHTML = `
-            <div class="text-4xl">🀄</div>
-            <p class="font-bold text-sm text-slate-700">Chưa có kèo nào đang chờ chơi!</p>
-            <p class="text-xs text-slate-400">Bấm "Lên Kèo Mới" để mở bát rủ hội cạ cứng ngay nhé.</p>
-        `;
-        container.appendChild(emptyState);
+        container.insertAdjacentHTML('beforeend', `
+            <div class="bg-white rounded-2xl border-2 border-dashed border-amber-300 p-8 text-center text-slate-500 space-y-2">
+                <div class="text-4xl">🀄</div>
+                <p class="font-bold text-sm text-slate-700">Chưa có kèo nào đang chờ chơi!</p>
+                <p class="text-xs text-slate-400">Bấm "Lên Kèo Mới" để mở bát rủ hội cạ cứng ngay nhé.</p>
+            </div>
+        `);
         return;
     }
 
@@ -1363,77 +1404,32 @@ function renderGames() {
         const expired = isGameExpired(game);
         const activePlayerCount = game.players ? game.players.length : 0;
         const isFull = activePlayerCount >= 4;
-        
-        const isUserInMain = currentUser && game.players && game.players.some(p => p.phone === currentUser.phone);
-        const isUserInSub = currentUser && game.substitutes && game.substitutes.some(s => s.phone === currentUser.phone);
+
+        const isUserInMain = currentUser && game.players?.some(p => p.phone === currentUser.phone);
+        const isUserInSub = currentUser && game.substitutes?.some(s => s.phone === currentUser.phone);
         const isUserInGame = isUserInMain || isUserInSub;
 
-        // Render thẻ Player
-        let playersHtml = (game.players || []).map(p => {
-            const isOnline = typeof activeOnlinePhones !== 'undefined' && activeOnlinePhones.has(p.phone);
-            return `
-            <div class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-[11px] flex items-center gap-1.5 shadow-sm">
-                <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
-                <span>🀄 ${p.name}</span>
-            </div>
-        `}).join('');
-
-        for (let i = activePlayerCount; i < 4; i++) {
-            playersHtml += `
-                <div class="bg-slate-100 border border-dashed border-slate-300 text-slate-400 font-bold px-2 py-1 rounded-xl text-[11px]">
-                    Ghế Trống #${i + 1}
-                </div>
-            `;
-        }
-
-        // Render danh sách Dự bị
-        let subHtml = '';
-        if (game.substitutes && game.substitutes.length > 0) {
-            subHtml = `
-                <div class="mt-2 text-[11px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200 flex items-center gap-1 font-bold">
-                    <span>🪑 Dự bị:</span>
-                    <span>${game.substitutes.map(s => s.name).join(', ')}</span>
-                </div>
-            `;
-        }
-
-        // Render Lời nhắn
-        let noteHtml = '';
-        if (game.note) {
-            noteHtml = `
-                <div class="text-[11px] text-slate-600 bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200/60 flex items-center gap-1.5 italic">
-                    <i class="fa-solid fa-comment-dots text-amber-600 text-xs"></i>
-                    <span>"${game.note}"</span>
-                </div>
-            `;
-        }
-
-        // Render nút bấm Action
         let actionButtonHtml = '';
         if (expired) {
-            actionButtonHtml = `
-                <div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">
-                    ⏳ Kèo đã qua thời gian
-                </div>
-            `;
+            actionButtonHtml = `<div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">⏳ Kèo đã qua thời gian</div>`;
         } else if (isUserInGame) {
             actionButtonHtml = `
-                <button onclick="leaveGame('${game.id}')" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                <button onclick="event.stopPropagation(); leaveGame('${game.id}')" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
                     <i class="fa-solid fa-door-open"></i>
                     <span>${isUserInSub ? 'Hủy Đăng Ký Dự Bị' : 'Rời Bàn'}</span>
-                </button>
-            `;
+                </button>`;
         } else {
             actionButtonHtml = `
-                <button onclick="joinGame('${game.id}')" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                <button onclick="event.stopPropagation(); joinGame('${game.id}')" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
                     <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
                     <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
-                </button>
-            `;
+                </button>`;
         }
 
         const card = document.createElement('div');
-        card.className = `bg-white rounded-2xl border-2 ${expired ? 'border-slate-300 opacity-75' : 'border-amber-400'} p-4 shadow-sm space-y-3 relative overflow-hidden mb-3`;
+        card.setAttribute('onclick', `openGameDetailModal('${game.id}')`);
+        card.className = `bg-white rounded-2xl border-2 ${expired ? 'border-slate-300 opacity-75' : 'border-amber-400 hover:border-amber-500'} p-4 shadow-sm space-y-3 relative overflow-hidden mb-3 cursor-pointer transition-all`;
+
         card.innerHTML = `
             ${expired ? `<span class="absolute top-2 right-2 bg-slate-200 text-slate-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Hết Hạn</span>` : ''}
             
@@ -1444,7 +1440,7 @@ function renderGames() {
                         <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
                             <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time}
                         </h3>
-                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${game.locationNote}</p>
+                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${game.locationNote || 'Địa điểm quen thuộc'}</p>
                     </div>
                 </div>
                 ${!expired ? `
@@ -1453,19 +1449,22 @@ function renderGames() {
                 </span>` : ''}
             </div>
 
-            ${noteHtml}
+            ${game.note ? `
+            <div class="text-[11px] text-slate-600 bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200/60 flex items-center gap-1.5 italic">
+                <i class="fa-solid fa-comment-dots text-amber-600 text-xs"></i>
+                <span>"${game.note}"</span>
+            </div>` : ''}
 
             <div>
                 <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${activePlayerCount}/4):</p>
                 <div class="flex flex-wrap gap-1.5">
-                    ${playersHtml}
+                    ${renderPlayersHtml(game.players, game.substitutes)}
                 </div>
-                ${subHtml}
             </div>
 
             <div class="flex items-center gap-2 pt-1">
                 ${actionButtonHtml}
-                <button onclick="openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center">
+                <button onclick="event.stopPropagation(); openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center" title="Chia sẻ">
                     <i class="fa-solid fa-share-nodes"></i>
                 </button>
             </div>
@@ -1530,16 +1529,23 @@ async function joinGame(gameId) {
 
     renderGames();
 
+    // Thông báo & hiệu ứng âm thanh sau khi tham gia thành công
     if (!isReserve) {
         if (typeof playJoinChime === 'function') playJoinChime();
         if (typeof showToast === 'function') {
-            showToast(game.players.length === 4 ? `🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!` : `Đã ghi tên ${currentUser.name} vào bàn!`, '✅');
+            showToast(
+                game.players.length === 4 
+                    ? `🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!` 
+                    : `Đã ghi tên ${currentUser.name} vào bàn!`, 
+                '✅'
+            );
         }
     } else {
         if (typeof openReserveModal === 'function') openReserveModal();
         else if (typeof showToast === 'function') showToast('Đã ghi tên bạn vào danh sách Dự Bị!', '🪑');
     }
 }
+
  // 4. Hàm Rời Bàn (Có tự động đôn Dự bị lên)
 async function leaveGame(gameId) {
     if (typeof playTileClickSound === 'function') playTileClickSound();
@@ -2348,6 +2354,208 @@ function copyShareLink() {
         `;
     }).join('');
 }
+
+// Biến lưu ván bài đang xem chi tiết
+let currentDetailGameId = null;
+
+// 1. Mở Popup chi tiết kèo theo ID
+function openGameDetailModal(gameId) {
+    if (typeof playTileClickSound === 'function') playTileClickSound();
+
+    currentDetailGameId = gameId;
+    const game = (typeof gamesData !== 'undefined' ? gamesData : []).find(g => g.id === gameId);
+    const container = document.getElementById('gameDetailContent');
+    const modal = document.getElementById('gameDetailModal');
+
+    if (!modal || !container) return;
+    if (!game) {
+        if (typeof showToast === 'function') showToast('Không tìm thấy ván bài này!', '⚠️');
+        return;
+    }
+
+    const expired = isGameExpired(game);
+    const activePlayerCount = game.players ? game.players.length : 0;
+    const isFull = activePlayerCount >= 4;
+
+    const isUserInMain = currentUser && game.players?.some(p => p.phone === currentUser.phone);
+    const isUserInSub = currentUser && game.substitutes?.some(s => s.phone === currentUser.phone);
+    const isUserInGame = isUserInMain || isUserInSub;
+
+    // Badge trạng thái
+    let statusBadgeHtml = '';
+    if (expired) {
+        statusBadgeHtml = `<span class="bg-slate-100 text-slate-600 border-slate-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Đã Hết Hạn</span>`;
+    } else {
+        statusBadgeHtml = isFull 
+            ? `<span class="bg-red-100 text-red-700 border-red-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Đủ 4 Chân</span>`
+            : `<span class="bg-emerald-100 text-emerald-800 border-emerald-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Còn ${4 - activePlayerCount} Chỗ</span>`;
+    }
+
+    // Nút bấm hành động trong Modal
+    let actionButtonHtml = '';
+    if (expired) {
+        actionButtonHtml = `<div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">⏳ Kèo đã hết hạn</div>`;
+    } else if (isUserInGame) {
+        actionButtonHtml = `
+            <button onclick="leaveGame('${game.id}'); closeGameDetailModal();" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                <i class="fa-solid fa-door-open"></i>
+                <span>${isUserInSub ? 'Hủy Đăng Ký Dự Bị' : 'Rời Bàn'}</span>
+            </button>`;
+    } else {
+        actionButtonHtml = `
+            <button onclick="joinGame('${game.id}'); closeGameDetailModal();" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
+                <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
+            </button>`;
+    }
+
+    // Gán HTML vào Modal
+    container.innerHTML = `
+        <div class="bg-white rounded-2xl border-2 ${expired ? 'border-slate-300' : 'border-amber-400'} p-4 shadow-sm space-y-3 relative overflow-hidden">
+            <div class="flex items-center justify-between border-b border-amber-100 pb-2">
+                <div class="flex items-center gap-2">
+                    <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
+                    <div>
+                        <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
+                            <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time || 'Chưa xếp giờ'}
+                        </h3>
+                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${game.locationNote || 'Địa điểm quen thuộc'}</p>
+                    </div>
+                </div>
+                ${statusBadgeHtml}
+            </div>
+
+            ${game.note ? `
+            <div class="text-[11px] text-slate-600 bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200/60 flex items-center gap-1.5 italic">
+                <i class="fa-solid fa-comment-dots text-amber-600 text-xs"></i>
+                <span>"${game.note}"</span>
+            </div>` : ''}
+
+            <div>
+                <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${activePlayerCount}/4):</p>
+                <div class="flex flex-wrap gap-1.5">
+                    ${renderPlayersHtml(game.players, game.substitutes)}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+                ${actionButtonHtml}
+                <button onclick="openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center" title="Chia sẻ bàn">
+                    <i class="fa-solid fa-share-nodes"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    modal.classList.remove('hidden');
+}
+
+// Hàm đóng Modal Chi Tiết Ván Bài
+function closeGameDetailModal() {
+    const modal = document.getElementById('gameDetailModal');
+    if (modal) modal.classList.add('hidden');
+    currentDetailGameId = null;
+}
+
+// Tự động kiểm tra param gameId trên URL khi tải trang
+function checkUrlForGameId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetGameId = urlParams.get('gameId');
+
+    if (targetGameId) {
+        // Đợi gamesData load xong rồi mới mở popup
+        setTimeout(() => {
+            openGameDetailModal(targetGameId);
+        }, 500);
+    }
+}
+// Hàm đóng Modal Chi Tiết Ván Bài
+function closeGameDetailModal() {
+    const modal = document.getElementById('gameDetailModal');
+    if (modal) modal.classList.add('hidden');
+    currentDetailGameId = null;
+}
+
+// Tự động kiểm tra param gameId trên URL khi tải trang
+function checkUrlForGameId() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const targetGameId = urlParams.get('gameId');
+
+    if (targetGameId) {
+        // Đợi gamesData load xong rồi mới mở popup
+        setTimeout(() => {
+            openGameDetailModal(targetGameId);
+        }, 500);
+    }
+}
+function openShareModal(gameId) {
+    if (typeof playTileClickSound === 'function') playTileClickSound();
+    
+    // 1. Lưu lại gameId hiện tại
+    currentShareGameId = gameId; 
+
+    const game = (gamesData || []).find(g => g.id === gameId);
+    const previewEl = document.getElementById('sharePreviewText');
+    
+    if (game && previewEl) {
+        previewEl.innerText = `Trận chơi lúc ${game.time} tại ${game.locationNote}. Hiện có ${game.players ? game.players.length : 0}/4 chân!`;
+    }
+    
+    const modal = document.getElementById('shareModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeShareModal() {
+    const modal = document.getElementById('shareModal');
+    if (modal) modal.classList.add('hidden');
+    currentShareGameId = null; // Reset lại khi đóng modal
+}
+
+// Hàm hỗ trợ tạo URL chứa tham số gameId
+function getGameShareUrl(gameId) {
+    const url = new URL(window.location.href);
+    if (gameId) {
+        url.searchParams.set('gameId', gameId);
+    }
+    return url.toString();
+}
+
+function copyShareLink() {
+    if (!currentShareGameId) return;
+
+    // Tạo link chứa ?gameId=xxx
+    const shareUrl = getGameShareUrl(currentShareGameId);
+    
+    navigator.clipboard.writeText(`🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${shareUrl}`);
+    if (typeof showToast === 'function') showToast('Đã copy link rủ cạ cứng!', '📋');
+    closeShareModal();
+}
+
+function simulateZaloShare() {
+    if (!currentShareGameId) return;
+
+    const shareUrl = getGameShareUrl(currentShareGameId);
+    const shareText = `🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${shareUrl}`;
+
+    // Tự động copy link vào clipboard cho người dùng khi chia sẻ qua Zalo
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(shareText);
+    }
+
+    if (typeof showToast === 'function') showToast('Đã copy link & mở Zalo...', '📱');
+    closeShareModal();
+}
+// Khởi chạy hàm kiểm tra URL khi DOM sẵn sàng
+// 3. Tự động mở Popup nếu URL có param ?game=G684 (Khi người khác bấm vào link Share)
+document.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameIdFromUrl = urlParams.get('game');
+    if (gameIdFromUrl) {
+        openGameDetailModal(gameIdFromUrl);
+    }
+});
+
+
     </script>
 </body>
 </html>
