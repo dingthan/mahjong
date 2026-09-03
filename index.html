@@ -1471,6 +1471,11 @@ function renderGames() {
         `;
         container.appendChild(card);
     });
+
+    if (!hasCheckedUrlOnLoad && typeof gamesData !== 'undefined' && gamesData.length > 0) {
+        hasCheckedUrlOnLoad = true;
+        checkAndOpenGameFromUrl();
+    }
 }
 
 // 3. Hàm Tham Gia Bàn
@@ -2548,20 +2553,39 @@ function simulateZaloShare() {
     closeShareModal();
 }
 // Khởi chạy hàm kiểm tra URL khi DOM sẵn sàng
-document.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const gameIdFromUrl = urlParams.get('gameId') || urlParams.get('id');
-    if (gameIdFromUrl) {
-        const allGames = typeof gamesData !== 'undefined' ? gamesData : [];
-        const exists = allGames.some(g => g.id === gameIdFromUrl);
+let hasCheckedUrlOnLoad = false;
 
-        if (exists) {
-            openGameDetailModal(gameIdFromUrl);
-        } else if (typeof showToast === 'function') {
-            showToast(`Không tìm thấy bàn bài #${gameId}!`, '⚠️');
-        }
+function checkAndOpenGameFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const rawGameId = urlParams.get('gameId') || urlParams.get('id');
+
+    if (!rawGameId) return;
+
+    const allGames = typeof gamesData !== 'undefined' ? gamesData : [];
+    const targetId = String(rawGameId).trim().toUpperCase();
+
+    // Tìm game linh hoạt (hỗ trợ cả G684, 684, #G684)
+    const foundGame = allGames.find(g => {
+        const idStr = String(g.id).trim().toUpperCase();
+        return idStr === targetId || idStr === targetId.replace(/^G/, '') || `G${idStr}` === targetId;
+    });
+
+    if (foundGame) {
+        // Dùng setTimeout 100ms để chắc chắn DOM giao diện đã vẽ xong
+        setTimeout(() => {
+            openGameDetailModal(foundGame.id);
+        }, 100);
+    } else if (typeof showToast === 'function') {
+        showToast(`Không tìm thấy bàn bài #${rawGameId}!`, '⚠️');
     }
-});
+}
+async function initApp() {
+    renderGames();
+    checkAndOpenGameFromUrl();
+}
+
+// Chạy khi trang bắt đầu
+document.addEventListener('DOMContentLoaded', initApp);
 
     </script>
 </body>
