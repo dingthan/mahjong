@@ -2503,6 +2503,8 @@ function openShareModal(gameId) {
     
     const modal = document.getElementById('shareModal');
     if (modal) modal.classList.remove('hidden');
+
+    closeGameDetailModal();
 }
 
 function closeShareModal() {
@@ -2546,32 +2548,20 @@ function simulateZaloShare() {
     closeShareModal();
 }
 // Khởi chạy hàm kiểm tra URL khi DOM sẵn sàng
-function checkAndOpenGameFromUrl() {
+document.addEventListener('DOMContentLoaded', () => {
     const urlParams = new URLSearchParams(window.location.search);
-    const gameId = urlParams.get('gameId') || urlParams.get('id');
-
-    if (gameId) {
+    const gameIdFromUrl = urlParams.get('gameId') || urlParams.get('id');
+    if (gameIdFromUrl) {
         const allGames = typeof gamesData !== 'undefined' ? gamesData : [];
-        const exists = allGames.some(g => g.id === gameId);
+        const exists = allGames.some(g => g.id === gameIdFromUrl);
 
         if (exists) {
-            openGameDetailModal(gameId);
+            openGameDetailModal(gameIdFromUrl);
         } else if (typeof showToast === 'function') {
             showToast(`Không tìm thấy bàn bài #${gameId}!`, '⚠️');
         }
     }
-}
-// 3. Tự động mở Popup nếu URL có param ?game=G684 (Khi người khác bấm vào link Share)
-async function initApp() {
-
-    // 2. Render danh sách ra giao diện
-    renderGames();
-
-    // 3. Đã có dữ liệu đầy đủ -> Mới check URL để mở Popup
-    checkAndOpenGameFromUrl();
-}
-
-document.addEventListener('DOMContentLoaded', initApp);
+});
 
     </script>
 </body>
