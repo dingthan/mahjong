@@ -712,9 +712,7 @@
 
     <!-- JAVASCRIPT LOGIC & STATE MANAGEMENT -->
     <script>
-// =====================================================================
 // STATE MANAGEMENT (gom hết biến trạng thái toàn cục vào một chỗ)
-// =====================================================================
 const LOCAL_STORAGE_KEY = 'PHONG_TAY_TREN_USER_SESSION';
 const SESSION_EXPIRE_MS = 72 * 60 * 60 * 1000; // 72 giờ không vào app
 
@@ -740,16 +738,12 @@ let currentDetailGameId = null;  // kèo đang mở popup chi tiết
 let currentShareGameId = null;   // kèo đang mở popup chia sẻ (FIX: khai báo rõ ràng, tránh biến global ngầm)
 let hasCheckedUrlOnLoad = false; // đã kiểm tra ?gameId= trên URL lúc tải trang chưa
 
-// =====================================================================
 // SUPABASE CLIENT
-// =====================================================================
 const SUPABASE_URL = "https://jhjpizxffbudymxojaxk.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoanBpenhmZmJ1ZHlteG9qYXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNDIyMzgsImV4cCI6MjEwMzcxODIzOH0.lLBNm99e1VEhLCndRYWq7iN84F774XZjifcNlDoCQbw";
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-// =====================================================================
 // ÂM THANH
-// =====================================================================
 function playTileClickSound() {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -786,9 +780,7 @@ function playJoinChime() {
     } catch (e) {}
 }
 
-// =====================================================================
 // KIỂM TRA HẾT HẠN KÈO
-// =====================================================================
 function isGameExpired(game) {
     if (!game) return false;
 
@@ -830,9 +822,7 @@ function toggleShowExpiredGames() {
     renderGames();
 }
 
-// =====================================================================
 // KHỞI ĐỘNG APP
-// =====================================================================
 document.addEventListener('DOMContentLoaded', () => {
     checkUserSessionOnStartup();
     fetchGamesFromSupabase();
@@ -857,9 +847,7 @@ function initSupabaseRealtimeSubscriptions() {
     }
 }
 
-// =====================================================================
 // FETCH DỮ LIỆU TỪ SUPABASE
-// =====================================================================
 async function fetchGamesFromSupabase() {
     if (!supabaseClient) {
         renderGames();
@@ -978,9 +966,7 @@ function formatTimeAgo(dateString) {
     return `${Math.floor(diffInSeconds / 86400)} ngày trước`;
 }
 
-// =====================================================================
 // PHIÊN ĐĂNG NHẬP & PRESENCE (ai đang online)
-// =====================================================================
 async function checkUserSessionOnStartup() {
     try {
         const savedUserStr = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -1138,9 +1124,7 @@ function updateUserUI() {
     }
 }
 
-// =====================================================================
 // LOGIN / PROFILE
-// =====================================================================
 function openProfileOrLoginModal() {
     playTileClickSound();
     if (currentUser) {
@@ -1301,9 +1285,7 @@ function handleLogout() {
     openMandatoryLoginModal();
 }
 
-// =====================================================================
 // ĐIỀU HƯỚNG TAB
-// =====================================================================
 function switchTab(tab) {
     playTileClickSound();
     ['tabViewGames', 'tabViewLeaderboard', 'tabViewChat', 'tabViewCalc'].forEach(id => {
@@ -1334,9 +1316,7 @@ function switchTab(tab) {
     }
 }
 
-// =====================================================================
 // TIỆN ÍCH ESCAPE CHUỖI
-// =====================================================================
 // Escape dấu nháy để chèn an toàn vào chuỗi onclick=""
 function escapeForAttr(str) {
     return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
@@ -1349,9 +1329,7 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
-// =====================================================================
 // DANH SÁCH KÈO
-// =====================================================================
 function renderPlayersHtml(players = [], substitutes = []) {
     const activeCount = players.length;
     let html = players.map(p => {
@@ -1513,9 +1491,7 @@ function renderGames() {
     }
 }
 
-// =====================================================================
 // THAM GIA / RỜI BÀN
-// =====================================================================
 async function joinGame(gameId) {
     playTileClickSound();
 
@@ -1617,9 +1593,7 @@ async function leaveGame(gameId) {
     showToast('Bạn đã rời khỏi bàn!', '👋');
 }
 
-// =====================================================================
 // TẠO KÈO MỚI
-// =====================================================================
 const DAYS_VN = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
 
 function generate30MinIntervals() {
@@ -1803,9 +1777,7 @@ function selectLocationType(type) {
     }
 }
 
-// =====================================================================
 // CHI TIẾT KÈO (popup) + CHIA SẺ QUA URL ?gameId=
-// =====================================================================
 function openGameDetailModal(gameId) {
     playTileClickSound();
 
@@ -1916,9 +1888,17 @@ function closeShareModal() {
 
 function copyShareLink() {
     if (!currentShareGameId) return;
-    const shareUrl = getGameShareUrl(currentShareGameId);
-    navigator.clipboard.writeText(`🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${shareUrl}`);
-    showToast('Đã copy link rủ cạ cứng!', '📋');
+    const previewEl = document.getElementById('sharePreviewText');
+    const shareUrl = typeof getGameShareUrl === 'function' 
+        ? getGameShareUrl(currentShareGameId) 
+        : window.location.href;
+    const previewText = previewEl ? previewEl.innerText : '';
+    const textToCopy = `🀄 [HỘI MẠT CHƯỢC] ${previewText}\n👉 Link vào bàn: ${shareUrl}`;
+
+    navigator.clipboard.writeText(textToCopy);
+    if (typeof showToast === 'function') {
+        showToast('Đã copy link rủ cạ cứng!', '📋');
+    }
     closeShareModal();
 }
 
@@ -1953,9 +1933,7 @@ function checkAndOpenGameFromUrl() {
     }
 }
 
-// =====================================================================
 // GHẾ DỰ BỊ
-// =====================================================================
 function openReserveModal() {
     document.getElementById('reserveModal').classList.remove('hidden');
 }
@@ -1969,9 +1947,7 @@ function acceptReserveAndCreateNew() {
     openCreateGameModal();
 }
 
-// =====================================================================
 // TÁM CHUYỆN / ẢNH
-// =====================================================================
 async function handleImageSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -2129,9 +2105,7 @@ function renderChatPosts() {
     }).join('');
 }
 
-// =====================================================================
 // QUẢN TRỊ WHITELIST
-// =====================================================================
 function renderAdminWhitelist() {
     const container = document.getElementById('adminWhitelistContainer');
     if (!container) return;
@@ -2290,13 +2264,7 @@ async function handleVerifyAdminMasterKey(e) {
     }
 }
 
-// =====================================================================
 // BẢNG VÀNG - xếp hạng toàn bộ thành viên theo số kèo đã tham gia
-// FIX: trước đây hàm này tự fetch lại Supabase mỗi lần mở tab (trùng lặp
-// với fetchGamesFromSupabase/fetchWhitelistFromSupabase đã đồng bộ realtime
-// sẵn). Giờ tái sử dụng thẳng state `gamesData` / `whitelistData` đang có,
-// vừa nhanh hơn vừa tránh gọi Supabase 2 lần cho cùng một dữ liệu.
-// =====================================================================
 function computeParticipationStats() {
     const statsByPhone = {};
 
@@ -2356,9 +2324,7 @@ function renderLeaderboard() {
     }).join('');
 }
 
-// =====================================================================
 // BẢNG TÍNH ĐIỂM
-// =====================================================================
 function calculateScore() {
     const winType = parseInt(document.getElementById('calcWinType').value, 10);
     let flower = parseInt(document.getElementById('calcFlower').value, 10) || 0;
@@ -2399,9 +2365,7 @@ function calculateScore() {
     document.getElementById('calcDetailText').innerText = detailText;
 }
 
-// =====================================================================
 // TOAST THÔNG BÁO
-// =====================================================================
 function showToast(message, icon = '🎉') {
     const toast = document.getElementById('toastNotification');
     const toastIcon = document.getElementById('toastIcon');
