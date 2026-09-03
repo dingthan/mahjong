@@ -284,7 +284,10 @@
                             <div>
                                 <label class="block font-bold text-slate-700 mb-1">Số Bông:</label>
                                 <input type="number" id="calcFlower" value="0" min="0" max="8" oninput="calculateScore()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-center">
-                                <input type="checkbox" id="calcFlowerColor" onchange="calculateScore()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 text-center">Cùng màu
+                                <label class="flex items-center gap-1.5 mt-1.5 text-[11px] font-bold text-slate-700 select-none cursor-pointer">
+                                    <input type="checkbox" id="calcFlowerColor" onchange="calculateScore()" class="w-4 h-4 accent-amber-500">
+                                    <span>Cùng màu</span>
+                                </label>
                             </div>
                             <div>
                                 <label class="block font-bold text-slate-700 mb-1">Mức Cược (Điểm):</label>
@@ -564,14 +567,25 @@
                 </div>
 
                 <form onsubmit="handleCreateGame(event)" class="space-y-3.5">
+                    <!-- Chọn Ngày -->
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Thời Gian Khai Cuộc</label>
-                        <select id="gameTimeSelect" class="w-full px-3 py-2.5 bg-amber-50/50 border-2 border-amber-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500">
-                            <option value="19:00 - Tối Nay">19:00 - Tối Nay</option>
-                            <option value="20:30 - Tối Nay">20:30 - Tối Nay</option>
-                            <option value="14:00 - Chiều Mai">14:00 - Chiều Mai</option>
-                            <option value="19:30 - Tối Mai">19:30 - Tối Mai</option>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Ngày Chơi</label>
+                        <select id="gameDateSelect" class="w-full px-3 py-2.5 bg-amber-50/50 border-2 border-amber-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500">
                         </select>
+                    </div>
+
+                    <!-- Chọn Giờ Bắt Đầu & Giờ Kết Thúc -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Bắt Đầu</label>
+                            <select id="gameStartTimeSelect" onchange="updateEndTimeOptions()" class="w-full px-3 py-2.5 bg-amber-50/50 border-2 border-amber-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500">
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Kết Thúc</label>
+                            <select id="gameEndTimeSelect" class="w-full px-3 py-2.5 bg-amber-50/50 border-2 border-amber-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500">
+                            </select>
+                        </div>
                     </div>
 
                     <div>
@@ -775,62 +789,46 @@
          * Hàm kiểm tra kèo đã hết hạn / qua thời gian chưa.
          * Quy đổi chuỗi thời gian như "19:00 - Tối Nay", "14:00 - Chiều Mai" hoặc timestamp thành Date object.
          */
-        function isGameExpired(game) {
-            if (!game || !game.time) return false;
+function isGameExpired(game) {
+    const now = new Date();
+    
+    // Nếu có ISO timestamp endAt/startAt chuẩn từ CSDL
+    if (game.endAt) {
+        return new Date(game.endAt) < now;
+    }
+    if (game.startAt) {
+        return new Date(game.startAt) < now;
+    }
+
+    // Trường hợp dự phòng: Parse từ string time nếu không có ISO timestamp
+    try {
+        const timeMatch = game.time.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
+        if (timeMatch) {
+            const endTimeStr = timeMatch[2]; // Lấy giờ kết thúc HH:mm
+            const dateMatch = game.time.match(/(\d{2})\/(\d{2})\/(\d{4})/);
             
-            // Nếu có trạng thái EXPIRED từ backend
-            if (game.status === 'EXPIRED' || game.status === 'FINISHED') return true;
-
-            const now = new Date();
-            const timeStr = game.time.trim();
+            let gameDate = new Date();
+            if (dateMatch) {
+                gameDate = new Date(`${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`);
+            }
             
-            // Thử parse định dạng chuẩn HH:MM - Tối Nay / Chiều Mai / Hôm Nay
-            const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*-\s*(.+)$/i);
-            if (match) {
-                const hours = parseInt(match[1], 10);
-                const minutes = parseInt(match[2], 10);
-                const dayLabel = match[3].toLowerCase();
-
-                let gameDate = new Date();
-                
-                // Xác định ngày dựa trên nhãn
-                if (dayLabel.includes('mai')) {
-                    gameDate.setDate(gameDate.getDate() + 1);
-                } else if (dayLabel.includes('mốt')) {
-                    gameDate.setDate(gameDate.getDate() + 2);
-                }
-                
-                gameDate.setHours(hours, minutes, 0, 0);
-
-                // Nếu kèo diễn ra ở quá khứ (cộng thêm 2 tiếng buffer cho trận đấu)
-                const expiredBufferTime = gameDate.getTime() + (2 * 60 * 60 * 1000); 
-                return now.getTime() > expiredBufferTime;
-            }
-
-            // Nếu truyền timestamp cụ thể ISO Date
-            const parsedDate = new Date(game.time);
-            if (!isNaN(parsedDate.getTime())) {
-                return now.getTime() > parsedDate.getTime() + (2 * 60 * 60 * 1000);
-            }
-
-            return false;
+            const [hours, minutes] = endTimeStr.split(':').map(Number);
+            gameDate.setHours(hours, minutes, 0, 0);
+            
+            return gameDate < now;
         }
+    } catch (e) {
+        console.error("Lỗi parse thời gian kèo:", e);
+    }
+    
+    return false;
+}
 
-        function toggleShowExpiredGames() {
-            showExpiredGames = !showExpiredGames;
-            const textEl = document.getElementById('toggleExpiredText');
-            const btnEl = document.getElementById('toggleExpiredBtn');
-            if (textEl && btnEl) {
-                if (showExpiredGames) {
-                    textEl.innerText = 'Ẩn kèo đã qua';
-                    btnEl.className = 'text-[10px] bg-red-900 text-amber-200 border border-amber-400 font-bold px-2 py-1 rounded-lg transition flex items-center gap-1';
-                } else {
-                    textEl.innerText = 'Hiện kèo đã qua';
-                    btnEl.className = 'text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold px-2 py-1 rounded-lg transition flex items-center gap-1';
-                }
-            }
-            renderGames();
-        }
+// Toggle ẩn/hiện kèo đã qua thời gian
+function toggleShowExpiredGames() {
+    showExpiredGames = !showExpiredGames;
+    renderGames();
+}
 
         document.addEventListener('DOMContentLoaded', () => {
             checkUserSessionOnStartup();
@@ -882,9 +880,14 @@
                 }
 
                 if (data && data.length > 0) {
+                    // FIX: trước đây thiếu map start_at / end_at / note khiến kèo tương lai
+                    // bị tính sai "đã hết hạn" và lời nhắn (note) biến mất sau khi refetch.
                     gamesData = data.map(g => ({
                         id: g.id,
                         time: g.time,
+                        startAt: g.start_at,
+                        endAt: g.end_at,
+                        note: g.note,
                         locationType: g.location_type,
                         locationNote: g.location_note,
                         createdBy: g.created_by,
@@ -998,19 +1001,13 @@
             }
         }
 
-        function isWebSocketAllowed() {
-            try {
-                if (typeof WebSocket === 'undefined') return false;
-                const testSocket = new WebSocket('wss://localhost:0');
-                testSocket.close();
-                return true;
-            } catch (e) {
-                return false;
-            }
-        }
+        // FIX: bỏ hàm test WebSocket giả (isWebSocketAllowed cũ chỉ bắt lỗi đồng bộ,
+        // không phản ánh việc kết nối thực sự có thành công hay không).
+        // Giờ initSupabasePresence() tự dựa vào callback status của subscribe()
+        // để quyết định fallback, chính xác hơn.
 
         function initSupabasePresence() {
-            if (!supabaseClient || !isWebSocketAllowed()) {
+            if (!supabaseClient || typeof WebSocket === 'undefined') {
                 fallbackLocalPresence();
                 return;
             }
@@ -1321,259 +1318,403 @@
             }
         }
 
-        function renderGames() {
-            const container = document.getElementById('gamesList');
-            const countEl = document.getElementById('activeGamesCount');
-            if (!container) return;
+// Hàm escape ký tự nháy đơn/nháy kép để chèn an toàn vào chuỗi onclick=""
+function escapeForAttr(str) {
+    return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
 
-            // Lọc kèo dựa theo biến showExpiredGames
-            const filteredGames = gamesData.filter(game => {
-                const expired = isGameExpired(game);
-                if (!showExpiredGames && expired) return false;
-                return true;
-            });
+// 2. Hàm Render Danh Sách Kèo Phỏng Bài
+function renderGames() {
+    const container = document.getElementById('gamesList');
+    const countEl = document.getElementById('activeGamesCount');
+    if (!container) return;
 
-            const activeCount = gamesData.filter(g => !isGameExpired(g)).length;
-            if (countEl) countEl.innerText = `${activeCount} Kèo Hot`;
+    // Lọc kèo dựa theo biến showExpiredGames
+    const filteredGames = (gamesData || []).filter(game => {
+        const expired = isGameExpired(game);
+        if (!showExpiredGames && expired) return false;
+        return true;
+    });
 
-            container.innerHTML = '';
+    const activeCount = (gamesData || []).filter(g => !isGameExpired(g)).length;
+    const expiredCount = (gamesData || []).filter(g => isGameExpired(g)).length;
 
-            if (filteredGames.length === 0) {
-                container.innerHTML = `
-                    <div class="bg-white rounded-2xl border-2 border-dashed border-amber-300 p-8 text-center text-slate-500 space-y-2">
-                        <div class="text-4xl">🀄</div>
-                        <p class="font-bold text-sm text-slate-700">Chưa có kèo nào đang chờ chơi!</p>
-                        <p class="text-xs text-slate-400">Bấm "Lên Kèo Mới" để mở bát rủ hội cạ cứng ngay nhé.</p>
-                    </div>
-                `;
-                return;
-            }
+    if (countEl) countEl.innerText = `${activeCount} Kèo Hot`;
 
-            filteredGames.forEach(game => {
-                const expired = isGameExpired(game);
-                const isFull = game.players.length >= 4;
-                const activePlayerCount = game.players.length;
-                const isUserInGame = currentUser && (game.players.some(p => p.phone === currentUser.phone) || game.substitutes.some(s => s.phone === currentUser.phone));
-                
-                let playersHtml = game.players.map(p => {
-                    const isOnline = activeOnlinePhones.has(p.phone);
-                    return `
-                    <div class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-[11px] flex items-center gap-1.5 shadow-sm">
-                        <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
-                        <span>🀄 ${p.name}</span>
-                    </div>
-                `}).join('');
+    container.innerHTML = '';
 
-                for (let i = activePlayerCount; i < 4; i++) {
-                    playersHtml += `
-                        <div class="bg-slate-100 border border-dashed border-slate-300 text-slate-400 font-bold px-2 py-1 rounded-xl text-[11px]">
-                            Ghế Trống #${i + 1}
-                        </div>
-                    `;
-                }
+    // Nút Bật/Tắt xem kèo đã qua
+    if (expiredCount > 0) {
+        const toggleBar = document.createElement('div');
+        toggleBar.className = "flex justify-between items-center bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 mb-3 border border-slate-200";
+        toggleBar.innerHTML = `
+            <span>Có ${expiredCount} kèo đã qua thời gian</span>
+            <button onclick="toggleShowExpiredGames()" class="text-amber-700 underline hover:text-amber-800">
+                ${showExpiredGames ? 'Ẩn kèo cũ' : 'Xem kèo đã qua'}
+            </button>
+        `;
+        container.appendChild(toggleBar);
+    }
 
-                let subHtml = '';
-                if (game.substitutes.length > 0) {
-                    subHtml = `
-                        <div class="mt-2 text-[11px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200 flex items-center gap-1 font-bold">
-                            <span>🪑 Dự bị:</span>
-                            <span>${game.substitutes.map(s => s.name).join(', ')}</span>
-                        </div>
-                    `;
-                }
+    if (filteredGames.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = "bg-white rounded-2xl border-2 border-dashed border-amber-300 p-8 text-center text-slate-500 space-y-2";
+        emptyState.innerHTML = `
+            <div class="text-4xl">🀄</div>
+            <p class="font-bold text-sm text-slate-700">Chưa có kèo nào đang chờ chơi!</p>
+            <p class="text-xs text-slate-400">Bấm "Lên Kèo Mới" để mở bát rủ hội cạ cứng ngay nhé.</p>
+        `;
+        container.appendChild(emptyState);
+        return;
+    }
 
-                let actionButtonHtml = '';
-                if (expired) {
-                    actionButtonHtml = `
-                        <div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">
-                            ⏳ Kèo đã qua thời gian
-                        </div>
-                    `;
-                } else if (isUserInGame) {
-                    actionButtonHtml = `
-                        <button onclick="leaveGame('${game.id}')" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
-                            <i class="fa-solid fa-door-open"></i>
-                            <span>Rời Bàn</span>
-                        </button>
-                    `;
-                } else {
-                    actionButtonHtml = `
-                        <button onclick="joinGame('${game.id}')" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
-                            <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
-                            <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
-                        </button>
-                    `;
-                }
+    filteredGames.forEach(game => {
+        const expired = isGameExpired(game);
+        const activePlayerCount = game.players ? game.players.length : 0;
+        const isFull = activePlayerCount >= 4;
+        
+        const isUserInMain = currentUser && game.players && game.players.some(p => p.phone === currentUser.phone);
+        const isUserInSub = currentUser && game.substitutes && game.substitutes.some(s => s.phone === currentUser.phone);
+        const isUserInGame = isUserInMain || isUserInSub;
 
-                const cardHtml = `
-                    <div class="bg-white rounded-2xl border-2 ${expired ? 'border-slate-300 opacity-75' : 'border-amber-400'} p-4 shadow-sm space-y-3 relative overflow-hidden">
-                        ${expired ? `<span class="absolute top-2 right-2 bg-slate-200 text-slate-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Hết Hạn</span>` : ''}
-                        
-                        <div class="flex items-center justify-between border-b border-amber-100 pb-2">
-                            <div class="flex items-center gap-2">
-                                <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
-                                <div>
-                                    <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
-                                        <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time}
-                                    </h3>
-                                    <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${game.locationNote}</p>
-                                </div>
-                            </div>
-                            ${!expired ? `
-                            <span class="${isFull ? 'bg-red-100 text-red-700 border-red-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'} border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">
-                                ${isFull ? 'Đủ 4 Chân' : `Còn ${4 - activePlayerCount} Chỗ`}
-                            </span>` : ''}
-                        </div>
+        // Render thẻ Player
+        let playersHtml = (game.players || []).map(p => {
+            const isOnline = typeof activeOnlinePhones !== 'undefined' && activeOnlinePhones.has(p.phone);
+            return `
+            <div class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-[11px] flex items-center gap-1.5 shadow-sm">
+                <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
+                <span>🀄 ${p.name}</span>
+            </div>
+        `}).join('');
 
-                        <div>
-                            <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${activePlayerCount}/4):</p>
-                            <div class="flex flex-wrap gap-1.5">
-                                ${playersHtml}
-                            </div>
-                            ${subHtml}
-                        </div>
-
-                        <div class="flex items-center gap-2 pt-1">
-                            ${actionButtonHtml}
-                            <button onclick="openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center">
-                                <i class="fa-solid fa-share-nodes"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-                container.innerHTML += cardHtml;
-            });
+        for (let i = activePlayerCount; i < 4; i++) {
+            playersHtml += `
+                <div class="bg-slate-100 border border-dashed border-slate-300 text-slate-400 font-bold px-2 py-1 rounded-xl text-[11px]">
+                    Ghế Trống #${i + 1}
+                </div>
+            `;
         }
 
-        async function joinGame(gameId) {
-            playTileClickSound();
-            if (!currentUser) {
-                showToast('🔒 Bạn cần nhập SĐT Whitelist để tham gia!', '⚠️');
-                openMandatoryLoginModal();
-                return;
-            }
-
-            const game = gamesData.find(g => g.id === gameId);
-            if (!game) return;
-
-            if (isGameExpired(game)) {
-                showToast('Kèo này đã hết hạn thời gian chơi!', '⏰');
-                return;
-            }
-
-            const alreadyJoined = game.players.some(p => p.phone === currentUser.phone);
-            if (alreadyJoined) {
-                showToast('Bạn đã có tên trong bàn chơi này rồi!', '😊');
-                return;
-            }
-
-            let isReserve = false;
-
-            if (game.players.length < 4) {
-                game.players.push({ name: currentUser.name, phone: currentUser.phone });
-                if (game.players.length === 4) game.status = 'FULL';
-            } else {
-                if (!game.substitutes.some(s => s.phone === currentUser.phone)) {
-                    game.substitutes.push({ name: currentUser.name, phone: currentUser.phone });
-                }
-                isReserve = true;
-            }
-
-            if (supabaseClient) {
-                try {
-                    await supabaseClient
-                        .from('games')
-                        .update({
-                            players: game.players,
-                            substitutes: game.substitutes,
-                            status: game.status
-                        })
-                        .eq('id', gameId);
-                } catch (err) {}
-            }
-
-            renderGames();
-
-            if (!isReserve) {
-                playJoinChime();
-                showToast(game.players.length === 4 ? `🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!` : `Đã ghi tên ${currentUser.name} vào bàn!`, '✅');
-            } else {
-                openReserveModal();
-            }
+        // Render danh sách Dự bị
+        let subHtml = '';
+        if (game.substitutes && game.substitutes.length > 0) {
+            subHtml = `
+                <div class="mt-2 text-[11px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200 flex items-center gap-1 font-bold">
+                    <span>🪑 Dự bị:</span>
+                    <span>${game.substitutes.map(s => s.name).join(', ')}</span>
+                </div>
+            `;
         }
 
-        async function leaveGame(gameId) {
-            playTileClickSound();
-            if (!currentUser) return;
-
-            const game = gamesData.find(g => g.id === gameId);
-            if (!game) return;
-
-            game.players = game.players.filter(p => p.phone !== currentUser.phone);
-            game.substitutes = game.substitutes.filter(s => s.phone !== currentUser.phone);
-
-            if (game.players.length < 4) {
-                game.status = 'OPEN';
-            }
-
-            if (supabaseClient) {
-                try {
-                    await supabaseClient
-                        .from('games')
-                        .update({
-                            players: game.players,
-                            substitutes: game.substitutes,
-                            status: game.status
-                        })
-                        .eq('id', gameId);
-                } catch (err) {}
-            }
-
-            renderGames();
-            showToast('Bạn đã rời khỏi bàn!', '👋');
+        // Render Lời nhắn
+        let noteHtml = '';
+        if (game.note) {
+            noteHtml = `
+                <div class="text-[11px] text-slate-600 bg-amber-50/60 px-2.5 py-1.5 rounded-lg border border-amber-200/60 flex items-center gap-1.5 italic">
+                    <i class="fa-solid fa-comment-dots text-amber-600 text-xs"></i>
+                    <span>"${game.note}"</span>
+                </div>
+            `;
         }
 
-        async function handleCreateGame(e) {
-            e.preventDefault();
-            if (!currentUser) {
-                openMandatoryLoginModal();
+        // Render nút bấm Action
+        let actionButtonHtml = '';
+        if (expired) {
+            actionButtonHtml = `
+                <div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">
+                    ⏳ Kèo đã qua thời gian
+                </div>
+            `;
+        } else if (isUserInGame) {
+            actionButtonHtml = `
+                <button onclick="leaveGame('${game.id}')" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                    <i class="fa-solid fa-door-open"></i>
+                    <span>${isUserInSub ? 'Hủy Đăng Ký Dự Bị' : 'Rời Bàn'}</span>
+                </button>
+            `;
+        } else {
+            actionButtonHtml = `
+                <button onclick="joinGame('${game.id}')" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+                    <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
+                    <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
+                </button>
+            `;
+        }
+
+        const card = document.createElement('div');
+        card.className = `bg-white rounded-2xl border-2 ${expired ? 'border-slate-300 opacity-75' : 'border-amber-400'} p-4 shadow-sm space-y-3 relative overflow-hidden mb-3`;
+        card.innerHTML = `
+            ${expired ? `<span class="absolute top-2 right-2 bg-slate-200 text-slate-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Hết Hạn</span>` : ''}
+            
+            <div class="flex items-center justify-between border-b border-amber-100 pb-2">
+                <div class="flex items-center gap-2">
+                    <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
+                    <div>
+                        <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
+                            <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time}
+                        </h3>
+                        <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${game.locationNote}</p>
+                    </div>
+                </div>
+                ${!expired ? `
+                <span class="${isFull ? 'bg-red-100 text-red-700 border-red-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'} border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">
+                    ${isFull ? 'Đủ 4 Chân' : `Còn ${4 - activePlayerCount} Chỗ`}
+                </span>` : ''}
+            </div>
+
+            ${noteHtml}
+
+            <div>
+                <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${activePlayerCount}/4):</p>
+                <div class="flex flex-wrap gap-1.5">
+                    ${playersHtml}
+                </div>
+                ${subHtml}
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+                ${actionButtonHtml}
+                <button onclick="openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center">
+                    <i class="fa-solid fa-share-nodes"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+// 3. Hàm Tham Gia Bàn
+async function joinGame(gameId) {
+    if (typeof playTileClickSound === 'function') playTileClickSound();
+    
+    if (!currentUser) {
+        if (typeof showToast === 'function') showToast('🔒 Bạn cần nhập SĐT Whitelist để tham gia!', '⚠️');
+        if (typeof openMandatoryLoginModal === 'function') openMandatoryLoginModal();
+        return;
+    }
+
+    const game = (gamesData || []).find(g => g.id === gameId);
+    if (!game) return;
+
+    if (isGameExpired(game)) {
+        if (typeof showToast === 'function') showToast('Kèo này đã hết hạn thời gian chơi!', '⏰');
+        return;
+    }
+
+    if (!game.players) game.players = [];
+    if (!game.substitutes) game.substitutes = [];
+
+    const inMain = game.players.some(p => p.phone === currentUser.phone);
+    const inSub = game.substitutes.some(s => s.phone === currentUser.phone);
+
+    if (inMain || inSub) {
+        if (typeof showToast === 'function') showToast('Bạn đã có tên trong bàn chơi này rồi!', '😊');
+        return;
+    }
+
+    let isReserve = false;
+
+    if (game.players.length < 4) {
+        game.players.push({ name: currentUser.name, phone: currentUser.phone });
+        if (game.players.length === 4) game.status = 'FULL';
+    } else {
+        game.substitutes.push({ name: currentUser.name, phone: currentUser.phone });
+        isReserve = true;
+    }
+
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            await supabaseClient
+                .from('games')
+                .update({
+                    players: game.players,
+                    substitutes: game.substitutes,
+                    status: game.status
+                })
+                .eq('id', gameId);
+        } catch (err) {
+            console.error("Lỗi cập nhật Supabase:", err);
+        }
+    }
+
+    renderGames();
+
+    if (!isReserve) {
+        if (typeof playJoinChime === 'function') playJoinChime();
+        if (typeof showToast === 'function') {
+            showToast(game.players.length === 4 ? `🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!` : `Đã ghi tên ${currentUser.name} vào bàn!`, '✅');
+        }
+    } else {
+        if (typeof openReserveModal === 'function') openReserveModal();
+        else if (typeof showToast === 'function') showToast('Đã ghi tên bạn vào danh sách Dự Bị!', '🪑');
+    }
+}
+ // 4. Hàm Rời Bàn (Có tự động đôn Dự bị lên)
+async function leaveGame(gameId) {
+    if (typeof playTileClickSound === 'function') playTileClickSound();
+    if (!currentUser) return;
+
+    const game = (gamesData || []).find(g => g.id === gameId);
+    if (!game) return;
+
+    const wasInMain = game.players.some(p => p.phone === currentUser.phone);
+
+    // Lọc bỏ người dùng khỏi cả 2 danh sách
+    game.players = (game.players || []).filter(p => p.phone !== currentUser.phone);
+    game.substitutes = (game.substitutes || []).filter(s => s.phone !== currentUser.phone);
+
+    // Nếu người rời bàn thuộc danh sách chính và có người chờ ở dự bị -> Tự động đôn lên
+    if (wasInMain && game.substitutes.length > 0 && game.players.length < 4) {
+        const promotedPlayer = game.substitutes.shift(); // Lấy người dự bị đầu tiên
+        game.players.push(promotedPlayer);
+        if (typeof showToast === 'function') {
+            showToast(`🎉 Tay bài dự bị ${promotedPlayer.name} đã được tự động đôn lên bàn chính!`, '✨');
+        }
+    }
+
+    if (game.players.length < 4) {
+        game.status = 'OPEN';
+    } else if (game.players.length === 4) {
+        game.status = 'FULL';
+    }
+
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+        try {
+            await supabaseClient
+                .from('games')
+                .update({
+                    players: game.players,
+                    substitutes: game.substitutes,
+                    status: game.status
+                })
+                .eq('id', gameId);
+        } catch (err) {
+            console.error("Lỗi cập nhật Supabase:", err);
+        }
+    }
+
+    renderGames();
+    if (typeof showToast === 'function') showToast('Bạn đã rời khỏi bàn!', '👋');
+}
+
+const DAYS_VN = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+
+// Tạo danh sách mốc giờ cách nhau 30 phút (00:00 -> 23:30)
+function generate30MinIntervals() {
+    const times = [];
+    for (let h = 0; h < 24; h++) {
+        for (let m of [0, 30]) {
+            const hh = String(h).padStart(2, '0');
+            const mm = String(m).padStart(2, '0');
+            times.push(`${hh}:${mm}`);
+        }
+    }
+    return times;
+}
+
+// Cập nhật danh sách Giờ Kết Thúc dựa theo Giờ Bắt Đầu đã chọn
+function updateEndTimeOptions() {
+    const startTime = document.getElementById('gameStartTimeSelect').value;
+    const endSelect = document.getElementById('gameEndTimeSelect');
+    const times = generate30MinIntervals();
+
+    endSelect.innerHTML = '';
+    
+    // Lọc chỉ chọn các mốc sau giờ bắt đầu
+    const validEndTimes = times.filter(t => t > startTime);
+    if (validEndTimes.length === 0) validEndTimes.push('23:59');
+
+    validEndTimes.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        endSelect.appendChild(opt);
+    });
+
+    // Mặc định chọn thời gian sau 2 tiếng
+    const [h, m] = startTime.split(':').map(Number);
+    const targetEndHour = String((h + 2) % 24).padStart(2, '0');
+    const targetEndTime = `${targetEndHour}:${String(m).padStart(2, '0')}`;
+
+    if (validEndTimes.includes(targetEndTime)) {
+        endSelect.value = targetEndTime;
+    }
+}
+
+async function handleCreateGame(event) {
+    event.preventDefault();
+    if (!currentUser) {
+        openMandatoryLoginModal();
+        return;
+    }
+
+    const dateSelect = document.getElementById('gameDateSelect');
+    const selectedDateIso = dateSelect.value;
+    const selectedDateLabel = dateSelect.options[dateSelect.selectedIndex].dataset.label;
+    
+    const startTime = document.getElementById('gameStartTimeSelect').value;
+    const endTime = document.getElementById('gameEndTimeSelect').value;
+    
+    // Chuỗi hiển thị định dạng tổng hợp (VD: "19:00 - 21:00 (Hôm nay (Thứ Năm, 03/09))")
+    const formattedTimeString = `${startTime} - ${endTime} (${selectedDateLabel})`;
+    
+    // Timestamp phục vụ lưu trữ CSDL & lọc kèo đã qua
+    const startAt = new Date(`${selectedDateIso}T${startTime}:00`).toISOString();
+    const endAt = new Date(`${selectedDateIso}T${endTime}:00`).toISOString();
+
+    const locationNote = document.getElementById('gameLocationNote').value || selectedLocationType;
+    const note = document.getElementById('gameNote').value;
+
+    const gameId = 'G' + Math.floor(100 + Math.random() * 900);
+    const gameObj = {
+        id: gameId,
+        time: formattedTimeString,
+        startAt: startAt,
+        endAt: endAt,
+        locationType: selectedLocationType,
+        locationNote: locationNote,
+        note: note,
+        createdBy: currentUser.name,
+        players: [{ name: currentUser.name, phone: currentUser.phone }],
+        substitutes: [],
+        status: 'OPEN',
+        createdAt: new Date().toISOString()
+    };
+
+    const gamePayload = {
+        id: gameId,
+        time: formattedTimeString,
+        start_at: startAt,
+        end_at: endAt,
+        location_type: selectedLocationType,
+        location_note: locationNote,
+        note: note,
+        created_by: currentUser.name,
+        players: [{ name: currentUser.name, phone: currentUser.phone }],
+        substitutes: [],
+        status: 'OPEN'
+    };
+
+    if (supabaseClient) {
+        try {
+            const { error } = await supabaseClient
+                .from('games')
+                .insert([gamePayload]);
+
+            if (error) {
+                console.error("Lỗi khi lưu Supabase:", error);
+                showToast(`❌ Không lưu được vào Supabase: ${error.message}`, '⚠️');
+                // Vẫn hiện kèo tạm trên máy để không mất trải nghiệm, nhưng KHÔNG đóng modal/coi là thành công
+                gamesData.unshift(gameObj);
+                renderGames();
                 return;
             }
-
-            const time = document.getElementById('gameTimeSelect').value;
-            const locationNote = document.getElementById('gameLocationNote').value || selectedLocationType;
-
-            const gameId = 'G' + Math.floor(100 + Math.random() * 900);
-            const gameObj = {
-                id: gameId,
-                time: time,
-                locationType: selectedLocationType,
-                locationNote: locationNote,
-                createdBy: currentUser.name,
-                players: [{ name: currentUser.name, phone: currentUser.phone }],
-                substitutes: [],
-                status: 'OPEN',
-                createdAt: new Date().toISOString()
-            };
-
-            const gamePayload = {
-                id: gameId,
-                time: time,
-                location_type: selectedLocationType,
-                location_note: locationNote,
-                created_by: currentUser.name,
-                players: [{ name: currentUser.name, phone: currentUser.phone }],
-                substitutes: [],
-                status: 'OPEN'
-            };
-
-            if (supabaseClient) {
-                try {
-                    await supabaseClient
-                        .from('games')
-                        .insert([gamePayload]);
-                } catch (err) {}
-            }
+        } catch (err) {
+            console.error("Lỗi khi lưu Supabase (exception):", err);
+            showToast(`❌ Lỗi kết nối Supabase: ${err.message || err}`, '⚠️');
+            return;
+        }
+    }
 
             gamesData.unshift(gameObj);
             closeCreateGameModal();
@@ -1592,7 +1733,7 @@
             if (type === 'Sào Huyệt Cũ') {
                 btnOld.className = "py-2 px-3 border-2 border-amber-400 bg-amber-400 text-red-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow";
                 btnNew.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
-                noteInput.value = "Sào Huyệt Hẻm 123 (Chỗ Cũ quen thuộc)";
+                noteInput.value = "Nơi Tình Yêu Bắt Đầu";
             } else {
                 btnNew.className = "py-2 px-3 border-2 border-amber-400 bg-amber-400 text-red-950 rounded-xl font-bold text-xs flex items-center justify-center gap-1 shadow";
                 btnOld.className = "py-2 px-3 border-2 border-slate-200 bg-slate-50 text-slate-600 rounded-xl font-bold text-xs flex items-center justify-center gap-1";
@@ -1694,10 +1835,19 @@
 
             if (supabaseClient) {
                 try {
-                    await supabaseClient
+                    const { error } = await supabaseClient
                         .from('posts')
                         .insert([postPayload]);
-                } catch (err) {}
+                    if (error) {
+                        console.error('Lỗi khi đăng bài lên Supabase:', error);
+                        showToast(`❌ Không đăng được bài: ${error.message}`, '⚠️');
+                        return;
+                    }
+                } catch (err) {
+                    console.error('Lỗi khi đăng bài (exception):', err);
+                    showToast(`❌ Lỗi kết nối Supabase: ${err.message || err}`, '⚠️');
+                    return;
+                }
             }
 
             textInput.value = '';
@@ -1805,6 +1955,8 @@
                 const isOnline = activeOnlinePhones.has(item.phone);
                 const div = document.createElement('div');
                 div.className = "bg-slate-950 p-3 rounded-xl border border-amber-500/30 flex items-center justify-between text-xs";
+                // FIX: escape dấu nháy trong phone/passcode/name trước khi chèn vào chuỗi onclick="",
+                // tránh trường hợp giá trị chứa dấu ' làm vỡ cú pháp JS trong attribute.
                 div.innerHTML = `
                     <div class="space-y-0.5">
                         <div class="flex items-center gap-2">
@@ -1816,16 +1968,35 @@
                         <p class="text-[11px] text-slate-400 font-semibold pl-4.5">${item.name || 'Chưa đặt biệt danh'} <span class="text-[10px] ${isOnline ? 'text-emerald-400' : 'text-slate-500'}">(${isOnline ? '🟢 Online' : '⚪ Offline'})</span></p>
                     </div>
                     <div class="flex items-center gap-1.5">
-                        <button onclick="editPasscodeUser('${item.phone}', '${passcodeVal}', '${item.name || ''}', '${roleVal}')" class="p-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 rounded-lg text-xs">
+                        <button onclick="editPasscodeUser('${escapeForAttr(item.phone)}', '${escapeForAttr(passcodeVal)}', '${escapeForAttr(item.name || '')}', '${escapeForAttr(roleVal)}')" class="p-1.5 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 rounded-lg text-xs">
                             <i class="fa-solid fa-pen-to-square"></i>
                         </button>
-                        <button onclick="deleteAllowedUser('${item.phone}')" class="p-1.5 bg-rose-950 hover:bg-rose-900 text-rose-400 rounded-lg text-xs border border-rose-800">
+                        <button onclick="deleteAllowedUser('${escapeForAttr(item.phone)}')" class="p-1.5 bg-rose-950 hover:bg-rose-900 text-rose-400 rounded-lg text-xs border border-rose-800">
                             <i class="fa-solid fa-trash-can"></i>
                         </button>
                     </div>
                 `;
                 container.appendChild(div);
             });
+        }
+
+        async function deleteAllowedUser(phone) {
+            if (!supabaseClient) return;
+            if (!confirm(`Xác nhận xoá whitelist cho SĐT ${phone}?`)) return;
+            try {
+                const { error } = await supabaseClient
+                    .from('allowed_users')
+                    .delete()
+                    .eq('phone', phone);
+                if (error) {
+                    showToast(`Lỗi khi xoá: ${error.message}`, '❌');
+                    return;
+                }
+                showToast('Đã xoá khỏi Whitelist!', '🗑️');
+                fetchWhitelistFromSupabase();
+            } catch (err) {
+                showToast('Lỗi khi xoá whitelist!', '❌');
+            }
         }
 
         async function handleSaveAllowedUser(e) {
@@ -1992,34 +2163,82 @@
             }, 3000);
         }
 
-        function openCreateGameModal() {
-            playTileClickSound();
+ // 5. Quản lý Modal Chiêu Mộ & Chia Sẻ
+function openCreateGameModal() {
+            if (!currentUser) {
+                openMandatoryLoginModal();
+                return;
+            }
+
+            const dateSelect = document.getElementById('gameDateSelect');
+            const startSelect = document.getElementById('gameStartTimeSelect');
+            const times = generate30MinIntervals();
+
+            dateSelect.innerHTML = '';
+            const today = new Date();
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const dayNum = String(d.getDate()).padStart(2, '0');
+                const isoDate = `${year}-${month}-${dayNum}`;
+
+                let displayLabel = i === 0 ? `Hôm nay, ${dayNum}/${month}` :
+                                   i === 1 ? `Ngày mai, ${dayNum}/${month}` :
+                                   `${DAYS_VN[d.getDay()]}, ${dayNum}/${month}`;
+
+                const opt = document.createElement('option');
+                opt.value = isoDate;
+                opt.dataset.label = displayLabel;
+                opt.textContent = displayLabel;
+                dateSelect.appendChild(opt);
+            }
+
+            startSelect.innerHTML = '';
+            times.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                startSelect.appendChild(opt);
+            });
+
+            startSelect.value = '19:00';
+            updateEndTimeOptions();
+
             document.getElementById('createGameModal').classList.remove('hidden');
         }
 
-        function closeCreateGameModal() {
-            document.getElementById('createGameModal').classList.add('hidden');
-        }
+function closeCreateGameModal() {
+    const modal = document.getElementById('createGameModal');
+    if (modal) modal.classList.add('hidden');
+}
 
-        function openShareModal(gameId) {
-            playTileClickSound();
-            const game = gamesData.find(g => g.id === gameId);
-            if (game) {
-                document.getElementById('sharePreviewText').innerText = `Trận chơi lúc ${game.time} tại ${game.locationNote}. Hiện có ${game.players.length}/4 chân!`;
-            }
-            document.getElementById('shareModal').classList.remove('hidden');
-        }
+function openShareModal(gameId) {
+    if (typeof playTileClickSound === 'function') playTileClickSound();
+    const game = (gamesData || []).find(g => g.id === gameId);
+    const previewEl = document.getElementById('sharePreviewText');
+    
+    if (game && previewEl) {
+        previewEl.innerText = `Trận chơi lúc ${game.time} tại ${game.locationNote}. Hiện có ${game.players ? game.players.length : 0}/4 chân!`;
+    }
+    
+    const modal = document.getElementById('shareModal');
+    if (modal) modal.classList.remove('hidden');
+}
 
-        function closeShareModal() {
-            document.getElementById('shareModal').classList.add('hidden');
-        }
+function closeShareModal() {
+    const modal = document.getElementById('shareModal');
+    if (modal) modal.classList.add('hidden');
+}
 
-        function copyShareLink() {
-            const dummyUrl = window.location.href;
-            navigator.clipboard.writeText(`🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${dummyUrl}`);
-            showToast('Đã copy link rủ cạ cứng!', '📋');
-            closeShareModal();
-        }
+function copyShareLink() {
+    const dummyUrl = window.location.href;
+    navigator.clipboard.writeText(`🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${dummyUrl}`);
+    if (typeof showToast === 'function') showToast('Đã copy link rủ cạ cứng!', '📋');
+    closeShareModal();
+}
 
         function simulateZaloShare() {
             showToast('Đang mở ứng dụng Zalo...', '📱');
