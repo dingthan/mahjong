@@ -800,6 +800,16 @@
          * Quy đổi chuỗi thời gian như "19:00 - Tối Nay", "14:00 - Chiều Mai" hoặc timestamp thành Date object.
          */
 function isGameExpired(game) {
+    if (!game) return false;
+
+    // 1. Ưu tiên kiểm tra cột status từ CSDL trước
+    if (game.status) {
+        const statusUpper = String(game.status).trim().toUpperCase();
+        if (statusUpper === 'EXPIRED' || statusUpper === 'ENDED') {
+            return true;
+        }
+    }
+
     const now = new Date();
     
     // Nếu có ISO timestamp endAt/startAt chuẩn từ CSDL
@@ -1366,34 +1376,61 @@ function renderPlayersHtml(players = [], substitutes = []) {
 function renderGames() {
     const container = document.getElementById('gamesList');
     const countEl = document.getElementById('activeGamesCount');
+    // Các element điều khiển toggle kèo cũ từ HTML
+    const toggleTextEl = document.getElementById('toggleExpiredText');
+    const toggleBtnEl = toggleTextEl ? toggleTextEl.closest('button') : null;
     if (!container) return;
 
-    const allGames = gamesData || [];
+    const allGames = (gamesData || []).map(game => ({
+        ...game,
+        expired: isGameExpired(game)
+    }));
     const activeCount = allGames.filter(g => !isGameExpired(g)).length;
     const expiredCount = allGames.length - activeCount;
 
     if (countEl) countEl.innerText = `${activeCount} Kèo Hot`;
     container.innerHTML = '';
 
-    // Thanh bật/tắt xem kèo cũ
-    if (expiredCount > 0) {
-        container.insertAdjacentHTML('beforeend', `
-            <div class="flex justify-between items-center bg-slate-100 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 mb-3 border border-slate-200">
-                <span>Có ${expiredCount} kèo đã qua thời gian</span>
-                <button onclick="toggleShowExpiredGames()" class="text-amber-700 underline hover:text-amber-800">
-                    ${showExpiredGames ? 'Ẩn kèo cũ' : 'Xem kèo đã qua'}
-                </button>
-            </div>
-        `);
+// 3. Cập nhật giao diện Nút toggle kèo cũ có sẵn trong HTML
+    if (toggleTextEl) {
+        if (expiredCount === 0) {
+            // Không có kèo cũ
+            toggleTextEl.innerText = 'Không có kèo cũ';
+            if (toggleBtnEl) {
+                toggleBtnEl.disabled = true;
+                toggleBtnEl.className = 'opacity-50 cursor-not-allowed text-slate-400 font-medium text-xs px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50';
+            }
+        } else {
+            // Có kèo cũ -> Cho phép bật/tắt & Đổi style/chữ
+            if (toggleBtnEl) toggleBtnEl.disabled = false;
+
+            if (showExpiredGames) {
+                // Trạng thái: ĐANG HIỆN -> Nút hiển thị kiểu Active
+                toggleTextEl.innerText = `Ẩn kèo cũ`;
+                if (toggleBtnEl) {
+                    toggleBtnEl.className = 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all';
+                }
+            } else {
+                // Trạng thái: ĐANG ẨN -> Nút hiển thị kiểu Mặc định
+                toggleTextEl.innerText = `Xem kèo cũ`;
+                if (toggleBtnEl) {
+                    toggleBtnEl.className = 'bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm';
+                }
+            }
+        }
     }
 
     const filteredGames = allGames.filter(game => showExpiredGames || !isGameExpired(game));
 
-    if (filteredGames.length === 0) {
+if (filteredGames.length === 0) {
+        const emptyMessage = showExpiredGames 
+            ? 'Chưa có kèo nào đã kết thúc!' 
+            : 'Chưa có kèo nào đang chờ chơi!';
+
         container.insertAdjacentHTML('beforeend', `
             <div class="bg-white rounded-2xl border-2 border-dashed border-amber-300 p-8 text-center text-slate-500 space-y-2">
                 <div class="text-4xl">🀄</div>
-                <p class="font-bold text-sm text-slate-700">Chưa có kèo nào đang chờ chơi!</p>
+                <p class="font-bold text-sm text-slate-700">${emptyMessage}</p>
                 <p class="text-xs text-slate-400">Bấm "Lên Kèo Mới" để mở bát rủ hội cạ cứng ngay nhé.</p>
             </div>
         `);
@@ -1492,7 +1529,7 @@ async function joinGame(gameId) {
     if (!game) return;
 
     if (isGameExpired(game)) {
-        if (typeof showToast === 'function') showToast('Kèo này đã hết hạn thời gian chơi!', '⏰');
+        if (typeof showToast === 'function') showToast('Kèo này đã hết hạn', '⏰', '. Bày kèo khác ngay!');
         return;
     }
 
