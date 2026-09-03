@@ -194,29 +194,19 @@
                 </div>
             </div>
 
-            <!-- TAB 2: LEADERBOARD / BẢNG VÀNG -->
-            <div id="tabViewLeaderboard" class="space-y-4 hidden">
-                <div class="bg-white rounded-2xl border-2 border-amber-400 p-4 shadow-sm text-center">
-                    <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">🏆</div>
-                    <h3 class="font-display text-lg font-bold text-slate-800">Bảng Vàng Danh Vọng</h3>
-                    <p class="text-xs text-slate-500 mb-4">Top Phỏng Thủ Siêu Cấp Đại Hội Mạt Chược</p>
+<!-- TAB 2: LEADERBOARD / BẢNG VÀNG -->
+<div id="tabViewLeaderboard" class="space-y-4 hidden">
+    <div class="bg-white rounded-2xl border-2 border-amber-400 p-4 shadow-sm text-center">
+        <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">🏆</div>
+        <h3 class="font-display text-lg font-bold text-slate-800">Bảng Vàng Danh Vọng</h3>
+        <p class="text-xs text-slate-500 mb-4">Thống kê toàn bộ thành viên theo tổng số kèo đã tham gia</p>
 
-                    <div class="space-y-2 text-left text-xs font-semibold">
-                        <div class="bg-amber-50 p-2.5 rounded-xl border border-amber-200 flex items-center justify-between">
-                            <span class="text-slate-800 font-bold">🥇 1. Tây Sài Gòn Phỏng Bài</span>
-                            <span class="bg-amber-400 text-red-950 font-black px-2 py-0.5 rounded-md">28 Trận</span>
-                        </div>
-                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex items-center justify-between">
-                            <span class="text-slate-800 font-bold">🥈 2. Sư Huynh Bảy Phỏng Tố</span>
-                            <span class="bg-slate-200 text-slate-800 font-black px-2 py-0.5 rounded-md">22 Trận</span>
-                        </div>
-                        <div class="bg-amber-50/50 p-2.5 rounded-xl border border-amber-100 flex items-center justify-between">
-                            <span class="text-slate-800 font-bold">🥉 3. Trưởng Hội Phỏng Tay</span>
-                            <span class="bg-amber-200 text-amber-900 font-black px-2 py-0.5 rounded-md">19 Trận</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <!-- Danh sách tự động render qua JS -->
+        <div id="leaderboardList" class="space-y-2 text-left text-xs font-semibold">
+            <div class="text-center py-4 text-slate-400 text-xs">Đang tải dữ liệu xếp hạng...</div>
+        </div>
+    </div>
+</div>
 
             <!-- TAB 3: TÁM CHUYỆN (CHAT & PHOTO FEED) -->
             <div id="tabViewChat" class="space-y-4 hidden">
@@ -258,14 +248,14 @@
                     <div class="flex items-center gap-2">
                         <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl font-bold">🧮</div>
                         <div>
-                            <h3 class="font-display text-sm font-bold text-slate-800">Bảng Tính Điểm Ù & Phỏng Bài</h3>
-                            <p class="text-[11px] text-slate-500 font-semibold">Tính phán / phán phạt nhanh cho trận đấu</p>
+                            <h3 class="font-display text-sm font-bold text-slate-800">Bảng Tính Điểm</h3>
+                            <p class="text-[11px] text-slate-500 font-semibold">Tính điểm nhanh cho trận đấu</p>
                         </div>
                     </div>
 
                     <div class="space-y-3 text-xs">
                         <div>
-                            <label class="block font-bold text-slate-700 mb-1">Loại Ù / Bài Thắng:</label>
+                            <label class="block font-bold text-slate-700 mb-1">Loại Bài Thắng:</label>
                             <select id="calcWinType" onchange="calculateScore()" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-amber-500">
                                 <option value="1">Tới Thường (1 Phán)</option>
                                 <option value="2">Tới Đặc Biệt (Toàn màu/Toàn phỏm/7 Đôi) (2 Phán)</option>
@@ -598,7 +588,7 @@
                                 <i class="fa-solid fa-map-pin"></i> Chỗ Mới
                             </button>
                         </div>
-                        <input type="text" id="gameLocationNote" placeholder="Tên quán trà sữa / địa chỉ..." value="Sào Huyệt Hẻm 123 (Chỗ Cũ quen thuộc)" class="w-full px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-amber-500">
+                        <input type="text" id="gameLocationNote" placeholder="Mật danh địa chỉ..." value="Nơi Tình Yêu Bắt Đầu" class="w-full px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-amber-500">
                     </div>
 
                     <div>
@@ -699,7 +689,7 @@
         let whitelistData = [];
 
         // Initial Demo Data
-        const initialDemoGames = [
+        /*const initialDemoGames = [
             {
                 id: 'G101',
                 time: '19:00 - Tối Nay',
@@ -739,10 +729,10 @@
                 likes: 5,
                 isLiked: false
             }
-        ];
+        ];*/
 
-        let gamesData = [...initialDemoGames];
-        let chatPostsData = [...initialDemoPosts];
+        let gamesData = [];
+        let chatPostsData = [];
 
         const SUPABASE_URL = "https://jhjpizxffbudymxojaxk.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoanBpenhmZmJ1ZHlteG9qYXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNDIyMzgsImV4cCI6MjEwMzcxODIzOH0.lLBNm99e1VEhLCndRYWq7iN84F774XZjifcNlDoCQbw";
@@ -1312,6 +1302,7 @@ function toggleShowExpiredGames() {
             } else if (tab === 'leaderboard') {
                 document.getElementById('tabViewLeaderboard').classList.remove('hidden');
                 document.getElementById('navBtnLeaderboard').classList.add('text-amber-400');
+                renderLeaderboard(); // Tải và xếp hạng lại danh sách thành viên từ Supabase
             } else if (tab === 'calc') {
                 document.getElementById('tabViewCalc').classList.remove('hidden');
                 document.getElementById('navBtnCalc').classList.add('text-amber-400');
@@ -2257,6 +2248,106 @@ function copyShareLink() {
             closeReserveModal();
             openCreateGameModal();
         }
+
+        async function renderLeaderboard() {
+    const container = document.getElementById('leaderboardList');
+    if (!container) return;
+
+    let users = [];
+    let games = gamesData || [];
+
+    // 1. Lấy dữ liệu thật từ Supabase nếu có kết nối
+    if (supabaseClient) {
+        try {
+            // Lấy toàn bộ thành viên trong bảng allowed_users
+            const { data: usersData } = await supabaseClient
+                .from('allowed_users')
+                .select('phone, name');
+            if (usersData && usersData.length > 0) users = usersData;
+
+            // Lấy danh sách tay bài của tất cả các kèo trong bảng games
+            const { data: fetchGames } = await supabaseClient
+                .from('games')
+                .select('players');
+            if (fetchGames && fetchGames.length > 0) games = fetchGames;
+        } catch (err) {
+            console.error('Lỗi khi tải dữ liệu Bảng vàng:', err);
+        }
+    }
+
+    // Fallback: Tự gom danh sách user từ các kèo hiện có nếu CSDL chưa có danh sách thành viên
+    if (users.length === 0) {
+        const phoneMap = new Map();
+        games.forEach(g => {
+            (g.players || []).forEach(p => {
+                if (p.phone && !phoneMap.has(p.phone)) {
+                    phoneMap.set(p.phone, p.name || p.phone);
+                }
+            });
+        });
+        phoneMap.forEach((name, phone) => users.push({ phone, name }));
+    }
+
+    // 2. Tính tổng số trận mỗi user đã tham gia (trong mảng players)
+    const stats = users.map(user => {
+        const totalPlayed = games.reduce((count, game) => {
+            const joined = (game.players || []).some(p => p.phone === user.phone || p.name === user.name);
+            return joined ? count + 1 : count;
+        }, 0);
+
+        return {
+            name: user.name || user.phone,
+            phone: user.phone,
+            count: totalPlayed
+        };
+    });
+
+    // 3. Sắp xếp giảm dần theo số trận (Top xuống dưới)
+    stats.sort((a, b) => b.count - a.count);
+
+    if (stats.length === 0) {
+        container.innerHTML = `<div class="text-center text-slate-400 py-4">Chưa có dữ liệu thành viên nào.</div>`;
+        return;
+    }
+
+    // 4. Render danh sách đầy đủ tất cả thành viên
+    container.innerHTML = stats.map((item, index) => {
+        const rank = index + 1;
+        let rankTag = '';
+        let rowStyle = '';
+        let badgeStyle = '';
+
+        if (rank === 1) {
+            rankTag = '🥇 1.';
+            rowStyle = 'bg-amber-100 border-amber-300 text-amber-950 font-bold';
+            badgeStyle = 'bg-amber-400 text-red-950 font-black';
+        } else if (rank === 2) {
+            rankTag = '🥈 2.';
+            rowStyle = 'bg-slate-100 border-slate-300 text-slate-800 font-bold';
+            badgeStyle = 'bg-slate-300 text-slate-800 font-black';
+        } else if (rank === 3) {
+            rankTag = '🥉 3.';
+            rowStyle = 'bg-amber-50/60 border-amber-200 text-amber-900 font-bold';
+            badgeStyle = 'bg-amber-200 text-amber-900 font-black';
+        } else {
+            rankTag = `<span class="inline-block w-5 text-center text-slate-400 font-bold">#${rank}</span>`;
+            rowStyle = 'bg-white border-slate-200 text-slate-700 font-medium';
+            badgeStyle = 'bg-slate-100 text-slate-600 border border-slate-200 font-bold';
+        }
+
+        return `
+            <div class="${rowStyle} p-2.5 rounded-xl border flex items-center justify-between shadow-sm transition-all">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <span class="min-w-[2rem] text-xs">${rankTag}</span>
+                    <span class="truncate">${item.name}</span>
+                </div>
+                <span class="${badgeStyle} px-2.5 py-0.5 rounded-md text-xs shrink-0">
+                    ${item.count} Trận
+                </span>
+            </div>
+        `;
+    }).join('');
+}
     </script>
 </body>
 </html>
