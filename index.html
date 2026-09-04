@@ -1570,28 +1570,27 @@ function renderPlayersHtml(players = [], substitutes = []) {
     const activeCount = players.length;
     let html = players.map(p => {
         const isOnline = activeOnlinePhones.has(p.phone);
+        const displayName = getCanonicalName(p.phone, p.name);
         return `
             <div class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-[11px] flex items-center gap-1.5 shadow-sm">
                 <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
-                <span>🀄 ${escapeHtml(p.name || p.phone)}</span>
+                <span>🀄 ${escapeHtml(displayName)}</span>
             </div>`;
     }).join('');
-
     for (let i = activeCount; i < 4; i++) {
         html += `
             <div class="bg-slate-100 border border-dashed border-slate-300 text-slate-400 font-bold px-2 py-1 rounded-xl text-[11px]">
                 Ghế Trống #${i + 1}
             </div>`;
     }
-
     if (substitutes.length > 0) {
+        const subNames = substitutes.map(s => getCanonicalName(s.phone, s.name)).join(', ');
         html += `
             <div class="w-full mt-2 text-[11px] text-purple-700 bg-purple-50 p-2 rounded-xl border border-purple-200 flex items-center gap-1 font-bold">
                 <span>🪑 Dự bị:</span>
-                <span>${escapeHtml(substitutes.map(s => s.name || s.phone).join(', '))}</span>
+                <span>${escapeHtml(subNames)}</span>
             </div>`;
     }
-
     return html;
 }
 
@@ -2577,20 +2576,23 @@ async function handleVerifyAdminMasterKey(e) {
         showToast('Mật mã Admin không chính xác!', '❌');
     }
 }
-
 // =====================================================================
 // BẢNG VÀNG - xếp hạng toàn bộ thành viên theo số kèo đã tham gia
 // =====================================================================
+        
+// Lấy tên theo phone cho tất cả các list cần hiển thị từ Whitelist
+function getCanonicalName(phone, fallbackName) {
+    const found = (whitelistData || []).find(u => u.phone === phone);
+    return (found && found.name) ? found.name : (fallbackName || phone);
+}
+        
 function computeParticipationStats() {
     const statsByPhone = {};
-    const namesFromWhitelist = new Set(); // Đánh dấu SĐT nào đã có tên "chuẩn" từ Whitelist
 
     // Khởi tạo từ Whitelist trước để hiện đủ mọi thành viên, kể cả 0 trận
-    // Tên lấy từ đây LUÔN LÀ NGUỒN CHUẨN NHẤT vì được cập nhật real-time khi đổi biệt danh
     (whitelistData || []).forEach(u => {
         if (!u || !u.phone) return;
-        statsByPhone[u.phone] = { phone: u.phone, name: u.name || u.phone, count: 0 };
-        namesFromWhitelist.add(u.phone);
+        statsByPhone[u.phone] = { phone: u.phone, name: getCanonicalName(u.phone, u.name), count: 0 };
     });
 
     // Đếm số lần góp mặt trong danh sách "players" (tay bài chính thức) của TẤT CẢ các kèo
@@ -2598,14 +2600,10 @@ function computeParticipationStats() {
         (game.players || []).forEach(p => {
             if (!p || !p.phone) return;
             if (!statsByPhone[p.phone]) {
-                statsByPhone[p.phone] = { phone: p.phone, name: p.name || p.phone, count: 0 };
+                statsByPhone[p.phone] = { phone: p.phone, name: getCanonicalName(p.phone, p.name), count: 0 };
             }
             statsByPhone[p.phone].count += 1;
-            // FIX: chỉ lấy tên từ snapshot của game khi phone này KHÔNG có trong Whitelist
-            // (tránh bị tên CŨ trong game ghi đè lên tên MỚI vừa đổi trong Whitelist)
-            if (p.name && !namesFromWhitelist.has(p.phone)) {
-                statsByPhone[p.phone].name = p.name;
-            }
+            // Tên luôn lấy từ getCanonicalName (ưu tiên Whitelist), không cần gán lại thủ công ở đây nữa
         });
     });
 
