@@ -217,7 +217,7 @@
                         <!-- Filter Toggle for Expired Games -->
                         <button onclick="toggleShowExpiredGames()" id="toggleExpiredBtn" class="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold px-2 py-1 rounded-lg transition flex items-center gap-1">
                             <i class="fa-solid fa-clock-rotate-left"></i>
-                            <span id="toggleExpiredText">Hiện kèo đã qua</span>
+                            <span id="toggleExpiredText">Xem kèo cũ</span>
                         </button>
                     </div>
                     <div id="gamesList" class="space-y-4"></div>
@@ -1518,6 +1518,7 @@ function switchTab(tab) {
     localStorage.setItem(ACTIVE_TAB_KEY, tab);
     ['tabViewGames', 'tabViewLeaderboard', 'tabViewChat', 'tabViewCalc'].forEach(id => {
         document.getElementById(id).classList.add('hidden');
+    });
 
     ['navBtnGames', 'navBtnChat', 'navBtnLeaderboard', 'navBtnCalc'].forEach(id => {
         const el = document.getElementById(id);
@@ -1639,10 +1640,10 @@ function renderGames() {
             if (toggleBtnEl) toggleBtnEl.disabled = false;
             if (showExpiredGames) {
                 toggleTextEl.innerText = 'Ẩn kèo cũ';
-                if (toggleBtnEl) toggleBtnEl.className = 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all';
+                if (toggleBtnEl) toggleBtnEl.className = 'bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-300 font-bold text-xs px-2 py-1 rounded-xl transition-all';
             } else {
                 toggleTextEl.innerText = 'Xem kèo cũ';
-                if (toggleBtnEl) toggleBtnEl.className = 'bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl transition-all shadow-sm';
+                if (toggleBtnEl) toggleBtnEl.className = 'bg-amber-100 text-amber-800 border border-amber-300 font-bold text-xs px-2 py-1 rounded-xl transition-all shadow-sm';
             }
         }
     }
