@@ -1504,6 +1504,7 @@ function handleLogout() {
     updateUserUI();
     initSupabasePresence();
     closeProfileModal();
+    switchTab('games');
     showToast('Đã đăng xuất tài khoản!', '👋');
     openMandatoryLoginModal();
 }
@@ -1511,11 +1512,12 @@ function handleLogout() {
 // =====================================================================
 // ĐIỀU HƯỚNG TAB
 // =====================================================================
+const ACTIVE_TAB_KEY = 'PHONG_TAY_TREN_ACTIVE_TAB';
 function switchTab(tab) {
     playTileClickSound();
+    localStorage.setItem(ACTIVE_TAB_KEY, tab);
     ['tabViewGames', 'tabViewLeaderboard', 'tabViewChat', 'tabViewCalc'].forEach(id => {
         document.getElementById(id).classList.add('hidden');
-    });
 
     ['navBtnGames', 'navBtnChat', 'navBtnLeaderboard', 'navBtnCalc'].forEach(id => {
         const el = document.getElementById(id);
@@ -1535,6 +1537,8 @@ function switchTab(tab) {
         document.getElementById('tabViewLeaderboard').classList.remove('hidden');
         document.getElementById('navBtnLeaderboard').classList.add('text-amber-400');
         renderLeaderboard();
+        fetchGamesFromSupabase();
+        fetchWhitelistFromSupabase();
     } else if (tab === 'calc') {
         document.getElementById('tabViewCalc').classList.remove('hidden');
         document.getElementById('navBtnCalc').classList.add('text-amber-400');
