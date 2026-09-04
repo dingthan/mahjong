@@ -2167,11 +2167,18 @@ function closeShareModal() {
 function copyShareLink() {
     if (!currentShareGameId) return;
     const previewEl = document.getElementById('sharePreviewText');
-    const textToCopy = previewEl ? previewEl.innerText : '';
-    if (!textToCopy) return;
- 
+    const shareUrl = typeof getGameShareUrl === 'function' 
+        ? getGameShareUrl(currentShareGameId) 
+        : window.location.href;
+
+    const previewText = previewEl ? previewEl.innerText : '';
+
+    const textToCopy = `🀄 [HỘI MẠT CHƯỢC] ${previewText}\n👉 Link vào bàn: ${shareUrl}`;
     navigator.clipboard.writeText(textToCopy);
-    showToast('Đã copy nội dung!', '📋');
+
+    if (typeof showToast === 'function') {
+        showToast('Đã copy link rủ cạ cứng!', '📋');
+    }
     closeShareModal();
 }
 
