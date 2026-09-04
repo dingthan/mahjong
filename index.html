@@ -1740,7 +1740,6 @@ function renderGames() {
         card.className = `bg-white rounded-2xl border-2 ${expired ? 'border-slate-300 opacity-75' : 'border-amber-400 hover:border-amber-500'} p-4 shadow-sm space-y-3 relative overflow-hidden mb-3 cursor-pointer transition-all ${isHighlighted ? 'ring-4 ring-amber-300 animate-pulse' : ''}`;
 
         card.innerHTML = `
-            ${parts.cornerBadgeHtml}
 
             <div class="flex items-start justify-between border-b border-amber-100 pb-2">
                 <div>
@@ -1752,6 +1751,7 @@ function renderGames() {
                         <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${formatGameTimeDisplay(game)}
                     </h3>
                 </div>
+                ${parts.cornerBadgeHtml}
                 ${parts.fullnessBadgeHtml}
             </div>
 
