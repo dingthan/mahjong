@@ -1512,10 +1512,8 @@ function handleLogout() {
 // =====================================================================
 // ĐIỀU HƯỚNG TAB
 // =====================================================================
-const ACTIVE_TAB_KEY = 'PHONG_TAY_TREN_ACTIVE_TAB';
 function switchTab(tab) {
     playTileClickSound();
-    localStorage.setItem(ACTIVE_TAB_KEY, tab);
     ['tabViewGames', 'tabViewLeaderboard', 'tabViewChat', 'tabViewCalc'].forEach(id => {
         document.getElementById(id).classList.add('hidden');
     });
@@ -1530,18 +1528,22 @@ function switchTab(tab) {
 
     if (tab === 'games') {
         document.getElementById('tabViewGames').classList.remove('hidden');
+        document.getElementById('navBtnGames').classList.remove('text-slate-400');
         document.getElementById('navBtnGames').classList.add('text-amber-400');
     } else if (tab === 'chat') {
         document.getElementById('tabViewChat').classList.remove('hidden');
+        document.getElementById('navBtnChat').classList.remove('text-slate-400');
         document.getElementById('navBtnChat').classList.add('text-amber-400');
     } else if (tab === 'leaderboard') {
         document.getElementById('tabViewLeaderboard').classList.remove('hidden');
+        document.getElementById('navBtnLeaderboard').classList.remove('text-slate-400');
         document.getElementById('navBtnLeaderboard').classList.add('text-amber-400');
         renderLeaderboard();
         fetchGamesFromSupabase();
         fetchWhitelistFromSupabase();
     } else if (tab === 'calc') {
         document.getElementById('tabViewCalc').classList.remove('hidden');
+        document.getElementById('navBtnCalc').classList.remove('text-slate-400');
         document.getElementById('navBtnCalc').classList.add('text-amber-400');
     }
 }
@@ -2578,18 +2580,17 @@ async function handleVerifyAdminMasterKey(e) {
 
 // =====================================================================
 // BẢNG VÀNG - xếp hạng toàn bộ thành viên theo số kèo đã tham gia
-// FIX: trước đây hàm này tự fetch lại Supabase mỗi lần mở tab (trùng lặp
-// với fetchGamesFromSupabase/fetchWhitelistFromSupabase đã đồng bộ realtime
-// sẵn). Giờ tái sử dụng thẳng state `gamesData` / `whitelistData` đang có,
-// vừa nhanh hơn vừa tránh gọi Supabase 2 lần cho cùng một dữ liệu.
 // =====================================================================
 function computeParticipationStats() {
     const statsByPhone = {};
+    const namesFromWhitelist = new Set(); // Đánh dấu SĐT nào đã có tên "chuẩn" từ Whitelist
 
     // Khởi tạo từ Whitelist trước để hiện đủ mọi thành viên, kể cả 0 trận
+    // Tên lấy từ đây LUÔN LÀ NGUỒN CHUẨN NHẤT vì được cập nhật real-time khi đổi biệt danh
     (whitelistData || []).forEach(u => {
         if (!u || !u.phone) return;
         statsByPhone[u.phone] = { phone: u.phone, name: u.name || u.phone, count: 0 };
+        namesFromWhitelist.add(u.phone);
     });
 
     // Đếm số lần góp mặt trong danh sách "players" (tay bài chính thức) của TẤT CẢ các kèo
@@ -2600,7 +2601,11 @@ function computeParticipationStats() {
                 statsByPhone[p.phone] = { phone: p.phone, name: p.name || p.phone, count: 0 };
             }
             statsByPhone[p.phone].count += 1;
-            if (p.name) statsByPhone[p.phone].name = p.name; // luôn lấy biệt danh mới nhất
+            // FIX: chỉ lấy tên từ snapshot của game khi phone này KHÔNG có trong Whitelist
+            // (tránh bị tên CŨ trong game ghi đè lên tên MỚI vừa đổi trong Whitelist)
+            if (p.name && !namesFromWhitelist.has(p.phone)) {
+                statsByPhone[p.phone].name = p.name;
+            }
         });
     });
 
