@@ -717,7 +717,7 @@
 
     </div>
 
-    <!-- JAVASCRIPT LOGIC & STATE MANAGEMENT -->
+ <!-<!-- JAVASCRIPT LOGIC & STATE MANAGEMENT (ĐÃ TỐI ƯU - gom các hàm lặp lại) -->
     <script>
 // =====================================================================
 // STATE MANAGEMENT (gom hết biến trạng thái toàn cục vào một chỗ)
@@ -744,7 +744,7 @@ let gamesData = [];
 let chatPostsData = [];
 
 let currentDetailGameId = null;  // kèo đang mở popup chi tiết
-let currentShareGameId = null;   // kèo đang mở popup chia sẻ (FIX: khai báo rõ ràng, tránh biến global ngầm)
+let currentShareGameId = null;   // kèo đang mở popup chia sẻ
 let hasCheckedUrlOnLoad = false; // đã kiểm tra ?gameId= trên URL lúc tải trang chưa
 
 let fcmMessaging = null;         // instance Firebase Messaging (nếu đã cấu hình)
@@ -756,6 +756,24 @@ let highlightGameId = null;      // id kèo vừa được tạo, dùng để hi
 const SUPABASE_URL = "https://jhjpizxffbudymxojaxk.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpoanBpenhmZmJ1ZHlteG9qYXhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxNDIyMzgsImV4cCI6MjEwMzcxODIzOH0.lLBNm99e1VEhLCndRYWq7iN84F774XZjifcNlDoCQbw";
 const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+// =====================================================================
+// TIỆN ÍCH SUPABASE DÙNG CHUNG
+// Gom mọi lệnh "update ... eq(...)" (trước đây lặp lại ở ~6 chỗ: profile name,
+// completeLogin, presence last_seen_at, joinGame, leaveGame, toggleLikePost...)
+// thành một hàm duy nhất, có try/catch và log lỗi thống nhất.
+// =====================================================================
+async function updateSupabaseRow(table, matchColumn, matchValue, fields) {
+    if (!supabaseClient) return { error: null };
+    try {
+        const { error } = await supabaseClient.from(table).update(fields).eq(matchColumn, matchValue);
+        if (error) console.error(`Lỗi cập nhật bảng "${table}":`, error);
+        return { error };
+    } catch (err) {
+        console.error(`Lỗi kết nối khi cập nhật bảng "${table}":`, err);
+        return { error: err };
+    }
+}
 
 // =====================================================================
 // FCM WEB PUSH NOTIFICATION
@@ -913,39 +931,64 @@ function playJoinChime() {
 // KIỂM TRA HẾT HẠN KÈO
 // =====================================================================
 function isGameExpired(game) {
-    if (!game) return false;
+    if (!game) return 'OPEN';
 
-    if (game.status) {
-        const statusUpper = String(game.status).trim().toUpperCase();
-        if (statusUpper === 'EXPIRED' || statusUpper === 'ENDED') return true;
+    // 1. Nếu CSDL đã lưu trạng thái cuối thì trả về luôn
+    const currentStatus = String(game.status || '').trim().toUpperCase();
+    if (currentStatus === 'EXPIRED' || currentStatus === 'ENDED') {
+        return currentStatus;
     }
 
+    // 2. Kiểm tra xem thời gian đã qua chưa
     const now = new Date();
+    let isTimePast = false;
 
-    if (game.endAt) return new Date(game.endAt) < now;
-    if (game.startAt) return new Date(game.startAt) < now;
+    if (game.endAt) {
+        isTimePast = new Date(game.endAt) < now;
+    } else if (game.startAt) {
+        isTimePast = new Date(game.startAt) < now;
+    } else if (game.time) {
+        try {
+            const timeMatch = game.time.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
+            if (timeMatch) {
+                const endTimeStr = timeMatch[2];
+                const dateMatch = game.time.match(/(\d{2})\/(\d{2})\/(\d{4})/);
 
-    // Dự phòng: parse từ chuỗi "time" nếu không có timestamp ISO
-    try {
-        const timeMatch = game.time.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
-        if (timeMatch) {
-            const endTimeStr = timeMatch[2];
-            const dateMatch = game.time.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                let gameDate = new Date();
+                if (dateMatch) {
+                    gameDate = new Date(`${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`);
+                }
 
-            let gameDate = new Date();
-            if (dateMatch) {
-                gameDate = new Date(`${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`);
+                const [hours, minutes] = endTimeStr.split(':').map(Number);
+                gameDate.setHours(hours, minutes, 0, 0);
+                isTimePast = gameDate < now;
             }
-
-            const [hours, minutes] = endTimeStr.split(':').map(Number);
-            gameDate.setHours(hours, minutes, 0, 0);
-            return gameDate < now;
+        } catch (e) {
+            console.error("Lỗi parse thời gian kèo:", e);
         }
-    } catch (e) {
-        console.error("Lỗi parse thời gian kèo:", e);
     }
 
-    return false;
+    // 3. Phân loại khi hết thời gian
+    if (isTimePast) {
+        const playerCount = game.players ? game.players.length : 0;
+        // Đủ 4 chân -> ENDED (Đã kết thúc) | Chưa đủ 4 chân -> EXPIRED (Đã hết hạn)
+        return playerCount >= 4 ? 'ENDED' : 'EXPIRED';
+    }
+
+    return 'OPEN';
+}
+
+async function syncGameStatusToSupabase(game) {
+    const calculatedStatus = isGameExpired(game);
+    const dbStatus = String(game.status || '').trim().toUpperCase();
+
+    // Chỉ update nếu CSDL chưa lưu hoặc chưa đúng trạng thái EXPIRED/ENDED
+    if ((calculatedStatus === 'EXPIRED' || calculatedStatus === 'ENDED') && dbStatus !== calculatedStatus) {
+        // Cập nhật ngay trên bộ nhớ client
+        game.status = calculatedStatus;
+        const { error } = await updateSupabaseRow('games', 'id', game.id, { status: calculatedStatus });
+        if (!error) console.log(`✅ Đã đồng bộ game #${game.id} sang status: ${calculatedStatus}`);
+    }
 }
 
 function toggleShowExpiredGames() {
@@ -972,6 +1015,7 @@ function getGameSortTimestamp(game) {
     try {
         const timeMatch = game.time.match(/(\d{2}):(\d{2})/);
         const dateMatch = game.time.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+        const dateMatch2 = game.time.match(/(\d{2})\/(\d{2})(?!\/)/); // Trường hợp "dd/mm" không có năm
 
         let refDate = new Date();
         if (dateMatch) {
@@ -979,8 +1023,7 @@ function getGameSortTimestamp(game) {
             const month = parseInt(dateMatch[2], 10) - 1;
             const year = parseInt(dateMatch[3], 10);
             refDate = new Date(year, month, day);
-        } else if (dateMatch2 = game.time.match(/(\d{2})\/(\d{2})(?!\/)/)) {
-            // Trường hợp không có năm, ví dụ "dd/mm" -> lấy năm hiện tại
+        } else if (dateMatch2) {
             const day = parseInt(dateMatch2[1], 10);
             const month = parseInt(dateMatch2[2], 10) - 1;
             refDate = new Date(new Date().getFullYear(), month, day);
@@ -1009,6 +1052,7 @@ function sortGamesByDateTime(games) {
         return getGameSortTimestamp(a) - getGameSortTimestamp(b);
     });
 }
+
 // =====================================================================
 // KHỞI ĐỘNG APP
 // =====================================================================
@@ -1082,32 +1126,27 @@ async function fetchGamesFromSupabase() {
 
         if (error) {
             console.warn('Games fetch notice:', error.message);
-            // FIX: không còn initialDemoGames (đã bỏ dữ liệu demo) -> fallback về mảng rỗng thay vì ReferenceError
             if (gamesData.length === 0) gamesData = [];
             renderGames();
             renderLeaderboard();
             return;
         }
 
-        if (data && data.length > 0) {
-            // FIX: map đủ start_at / end_at / note để isGameExpired() và hiển thị lời nhắn hoạt động đúng
-            gamesData = data.map(g => ({
-                id: g.id,
-                time: g.time,
-                startAt: g.start_at,
-                endAt: g.end_at,
-                note: g.note,
-                locationType: g.location_type,
-                locationNote: g.location_note,
-                createdBy: g.created_by,
-                players: typeof g.players === 'string' ? JSON.parse(g.players) : (g.players || []),
-                substitutes: typeof g.substitutes === 'string' ? JSON.parse(g.substitutes) : (g.substitutes || []),
-                status: g.status,
-                createdAt: g.created_at
-            }));
-        } else {
-            gamesData = [];
-        }
+        gamesData = (data && data.length > 0) ? data.map(g => ({
+            id: g.id,
+            time: g.time,
+            startAt: g.start_at,
+            endAt: g.end_at,
+            note: g.note,
+            locationType: g.location_type,
+            locationNote: g.location_note,
+            createdBy: g.created_by,
+            players: typeof g.players === 'string' ? JSON.parse(g.players) : (g.players || []),
+            substitutes: typeof g.substitutes === 'string' ? JSON.parse(g.substitutes) : (g.substitutes || []),
+            status: g.status,
+            createdAt: g.created_at
+        })) : [];
+
         renderGames();
         renderLeaderboard();
     } catch (err) {
@@ -1131,7 +1170,6 @@ async function fetchPostsFromSupabase() {
             .order('created_at', { ascending: false });
 
         if (error) {
-            // FIX: không còn initialDemoPosts -> fallback về mảng rỗng thay vì ReferenceError
             if (chatPostsData.length === 0) chatPostsData = [];
             renderChatPosts();
             return;
@@ -1288,12 +1326,7 @@ function initSupabasePresence() {
                             name: currentUser.name,
                             onlineAt: new Date().toISOString()
                         });
-
-                        supabaseClient
-                            .from('allowed_users')
-                            .update({ last_seen_at: new Date().toISOString() })
-                            .eq('phone', currentUser.phone)
-                            .then();
+                        updateSupabaseRow('allowed_users', 'phone', currentUser.phone, { last_seen_at: new Date().toISOString() });
                     } catch (e) {
                         fallbackLocalPresence();
                     }
@@ -1379,14 +1412,7 @@ async function handleUpdateProfileName() {
     document.getElementById('profileModalName').innerText = newName;
     updateUserUI();
 
-    if (supabaseClient) {
-        try {
-            await supabaseClient
-                .from('allowed_users')
-                .update({ name: newName, last_seen_at: new Date().toISOString() })
-                .eq('phone', currentUser.phone);
-        } catch (err) {}
-    }
+    await updateSupabaseRow('allowed_users', 'phone', currentUser.phone, { name: newName, last_seen_at: new Date().toISOString() });
 
     showToast('Đã lưu biệt danh mới!', '✅');
 }
@@ -1479,14 +1505,7 @@ async function completeLogin(phone, name, role = 'member') {
     initSupabasePresence();
     document.getElementById('loginModal').classList.add('hidden');
 
-    if (supabaseClient) {
-        try {
-            await supabaseClient
-                .from('allowed_users')
-                .update({ name: name, role: role, last_seen_at: new Date().toISOString() })
-                .eq('phone', phone);
-        } catch (err) {}
-    }
+    await updateSupabaseRow('allowed_users', 'phone', phone, { name, role, last_seen_at: new Date().toISOString() });
 
     playJoinChime();
     showToast(`Chào mừng ${role === 'admin' ? 'Quản Trị Viên' : 'Cao Thủ'} ${name}!`, '🀄');
@@ -1526,25 +1545,24 @@ function switchTab(tab) {
         }
     });
 
-    if (tab === 'games') {
-        document.getElementById('tabViewGames').classList.remove('hidden');
-        document.getElementById('navBtnGames').classList.remove('text-slate-400');
-        document.getElementById('navBtnGames').classList.add('text-amber-400');
-    } else if (tab === 'chat') {
-        document.getElementById('tabViewChat').classList.remove('hidden');
-        document.getElementById('navBtnChat').classList.remove('text-slate-400');
-        document.getElementById('navBtnChat').classList.add('text-amber-400');
-    } else if (tab === 'leaderboard') {
-        document.getElementById('tabViewLeaderboard').classList.remove('hidden');
-        document.getElementById('navBtnLeaderboard').classList.remove('text-slate-400');
-        document.getElementById('navBtnLeaderboard').classList.add('text-amber-400');
+    const tabConfig = {
+        games: { viewId: 'tabViewGames', navId: 'navBtnGames' },
+        chat: { viewId: 'tabViewChat', navId: 'navBtnChat' },
+        leaderboard: { viewId: 'tabViewLeaderboard', navId: 'navBtnLeaderboard' },
+        calc: { viewId: 'tabViewCalc', navId: 'navBtnCalc' }
+    };
+
+    const config = tabConfig[tab];
+    if (!config) return;
+
+    document.getElementById(config.viewId).classList.remove('hidden');
+    document.getElementById(config.navId).classList.remove('text-slate-400');
+    document.getElementById(config.navId).classList.add('text-amber-400');
+
+    if (tab === 'leaderboard') {
         renderLeaderboard();
         fetchGamesFromSupabase();
         fetchWhitelistFromSupabase();
-    } else if (tab === 'calc') {
-        document.getElementById('tabViewCalc').classList.remove('hidden');
-        document.getElementById('navBtnCalc').classList.remove('text-slate-400');
-        document.getElementById('navBtnCalc').classList.add('text-amber-400');
     }
 }
 
@@ -1574,7 +1592,7 @@ function renderPlayersHtml(players = [], substitutes = []) {
         return `
             <div class="bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-[11px] flex items-center gap-1.5 shadow-sm">
                 <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}" title="${isOnline ? 'Đang Online' : 'Ngoại tuyến'}"></span>
-                <span>🀄 ${escapeHtml(displayName)}</span>
+                <span> ${escapeHtml(displayName)}</span>
             </div>`;
     }).join('');
     for (let i = activeCount; i < 4; i++) {
@@ -1594,23 +1612,64 @@ function renderPlayersHtml(players = [], substitutes = []) {
     return html;
 }
 
-function buildGameActionButtonHtml(game, expired, isFull, isUserInGame, isUserInSub, useStopPropagation) {
+// Nút hành động chính (Tham gia / Rời bàn / Đã hết hạn / Đã kết thúc).
+// Dùng chung cho cả card danh sách và popup chi tiết.
+function buildGameActionButtonHtml(game, gameStatus, isFull, isUserInGame, isUserInSub, useStopPropagation) {
     const sp = useStopPropagation ? 'event.stopPropagation(); ' : '';
-    if (expired) {
-        return `<div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">⏳ Kèo đã qua thời gian</div>`;
+    const closeAfter = useStopPropagation ? '' : '; closeGameDetailModal();';
+
+    if (gameStatus === 'EXPIRED') {
+        return `<div class="flex-1 bg-slate-200 text-slate-500 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">⏳ Kèo đã hết hạn</div>`;
+    }
+    if (gameStatus === 'ENDED') {
+        return `<div class="flex-1 bg-slate-100 text-slate-800 font-bold py-2 rounded-xl text-xs text-center border border-slate-300">🏁 Kèo đã kết thúc</div>`;
     }
     if (isUserInGame) {
         return `
-            <button onclick="${sp}leaveGame('${game.id}')${useStopPropagation ? '' : '; closeGameDetailModal();'}" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+            <button onclick="${sp}leaveGame('${game.id}')${closeAfter}" class="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
                 <i class="fa-solid fa-door-open"></i>
                 <span>${isUserInSub ? 'Hủy Đăng Ký Dự Bị' : 'Rời Bàn'}</span>
             </button>`;
     }
     return `
-        <button onclick="${sp}joinGame('${game.id}')${useStopPropagation ? '' : '; closeGameDetailModal();'}" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
+        <button onclick="${sp}joinGame('${game.id}')${closeAfter}" class="flex-1 ${isFull ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'btn-cartoon-gold text-red-950'} font-display font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow">
             <i class="${isFull ? 'fa-solid fa-chair' : 'fa-solid fa-right-to-bracket'}"></i>
             <span>${isFull ? 'Xin Vào Hàng Dự Bị' : 'Tham Gia Ngay'}</span>
         </button>`;
+}
+
+// Gom toàn bộ phần UI phụ thuộc trạng thái của 1 kèo (badge góc, badge số chỗ trống,
+// nút hành động, nút chia sẻ) vào MỘT nơi duy nhất, để renderGames() và
+// openGameDetailModal() không phải tự viết lại HTML giống hệt nhau nữa.
+function getGameCardParts(game, gameStatus, useStopPropagation) {
+    const activePlayerCount = game.players ? game.players.length : 0;
+    const isFull = activePlayerCount >= 4;
+    const isUserInMain = currentUser && game.players?.some(p => p.phone === currentUser.phone);
+    const isUserInSub = currentUser && game.substitutes?.some(s => s.phone === currentUser.phone);
+    const isUserInGame = isUserInMain || isUserInSub;
+    const isClosed = gameStatus === 'EXPIRED' || gameStatus === 'ENDED';
+
+    const actionButtonHtml = buildGameActionButtonHtml(game, gameStatus, isFull, isUserInGame, isUserInSub, useStopPropagation);
+
+    const sp = useStopPropagation ? 'event.stopPropagation(); ' : '';
+    const actionShareHtml = isClosed ? '' : `
+        <button onclick="${sp}openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center" title="Chia sẻ">
+            <i class="fa-solid fa-share-nodes"></i>
+        </button>`;
+
+    // Badge góc trên (card danh sách) - chỉ hiện khi kèo đã hết hạn/kết thúc
+    const cornerBadgeHtml = gameStatus === 'EXPIRED'
+        ? `<span class="absolute top-3.5 right-3 bg-slate-100 text-slate-800 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Hết Hạn</span>`
+        : gameStatus === 'ENDED'
+        ? `<span class="absolute top-3.5 right-3 bg-slate-100 text-slate-800 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Kết Thúc</span>`
+        : '';
+
+    // Badge số chỗ trống - chỉ hiện khi kèo còn mở
+    const fullnessBadgeHtml = isClosed ? '' : (isFull
+        ? `<span class="absolute top-3.5 right-3 bg-red-100 text-red-700 border-red-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Đủ 4 Chân</span>`
+        : `<span class="absolute top-3.5 right-3 bg-emerald-100 text-emerald-800 border-emerald-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Còn ${4 - activePlayerCount} Chỗ</span>`);
+
+    return { activePlayerCount, isFull, isUserInGame, isUserInSub, isClosed, actionButtonHtml, actionShareHtml, cornerBadgeHtml, fullnessBadgeHtml };
 }
 
 function renderGames() {
@@ -1621,7 +1680,15 @@ function renderGames() {
     if (!container) return;
 
     // Tính "expired" MỘT LẦN cho mỗi kèo, rồi tái sử dụng thay vì gọi isGameExpired() lặp lại nhiều lần
-    let allGames = (gamesData || []).map(game => ({ ...game, expired: isGameExpired(game) }));
+    let allGames = (gamesData || []).map(game => {
+        const gameStatus = isGameExpired(game);
+        const expired = gameStatus === 'EXPIRED' || gameStatus === 'ENDED';
+
+        // Tự động đồng bộ CSDL ngầm nếu trạng thái vừa chuyển sang EXPIRED/ENDED
+        syncGameStatusToSupabase(game);
+
+        return { ...game, gameStatus, expired };
+    });
     allGames = sortGamesByDateTime(allGames); // Sắp xếp theo Năm - Tháng - Ngày - Giờ (gần nhất lên trước)
     const activeCount = allGames.filter(g => !g.expired).length;
     const expiredCount = allGames.length - activeCount;
@@ -1649,10 +1716,10 @@ function renderGames() {
         }
     }
 
-    const filteredGames = allGames.filter(g => showExpiredGames || !g.expired);
+    const filteredGames = allGames.filter(game => showExpiredGames || !game.expired);
 
     if (filteredGames.length === 0) {
-        const emptyMessage = showExpiredGames ? 'Chưa có kèo nào đã kết thúc!' : 'Chưa có kèo nào đang chờ chơi!';
+        const emptyMessage = showExpiredGames ? 'Chưa có kèo cũ nào!' : 'Chưa có kèo mới nào đang chờ!';
         container.insertAdjacentHTML('beforeend', `
             <div class="bg-white rounded-2xl border-2 border-dashed border-amber-300 p-8 text-center text-slate-500 space-y-2">
                 <div class="text-4xl">🀄</div>
@@ -1664,27 +1731,20 @@ function renderGames() {
     }
 
     filteredGames.forEach(game => {
-        const expired = game.expired;
-        const activePlayerCount = game.players ? game.players.length : 0;
-        const isFull = activePlayerCount >= 4;
-
-        const isUserInMain = currentUser && game.players?.some(p => p.phone === currentUser.phone);
-        const isUserInSub = currentUser && game.substitutes?.some(s => s.phone === currentUser.phone);
-        const isUserInGame = isUserInMain || isUserInSub;
-
-        const actionButtonHtml = buildGameActionButtonHtml(game, expired, isFull, isUserInGame, isUserInSub, true);
-
+        const { expired, gameStatus } = game;
+        const parts = getGameCardParts(game, gameStatus, true);
         const isHighlighted = highlightGameId === game.id;
+
         const card = document.createElement('div');
         card.setAttribute('onclick', `openGameDetailModal('${game.id}')`);
         card.className = `bg-white rounded-2xl border-2 ${expired ? 'border-slate-300 opacity-75' : 'border-amber-400 hover:border-amber-500'} p-4 shadow-sm space-y-3 relative overflow-hidden mb-3 cursor-pointer transition-all ${isHighlighted ? 'ring-4 ring-amber-300 animate-pulse' : ''}`;
 
         card.innerHTML = `
-            ${expired ? `<span class="absolute top-2 right-2 bg-slate-200 text-slate-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Hết Hạn</span>` : ''}
+            ${parts.cornerBadgeHtml}
 
             <div class="flex items-start justify-between border-b border-amber-100 pb-2">
                 <div>
-                    <div class="flex items-center gap-2 pb-1">
+                     <div class="flex items-center gap-2 pb-1">
                         <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
                         <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${escapeHtml(game.locationNote || 'Địa điểm quen thuộc')}</p>
                     </div>
@@ -1692,10 +1752,7 @@ function renderGames() {
                         <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${formatGameTimeDisplay(game)}
                     </h3>
                 </div>
-                ${!expired ? `
-                <span class="${isFull ? 'bg-red-100 text-red-700 border-red-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'} border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">
-                    ${isFull ? 'Đủ 4 Chân' : `Còn ${4 - activePlayerCount} Chỗ`}
-                </span>` : ''}
+                ${parts.fullnessBadgeHtml}
             </div>
 
             ${game.note ? `
@@ -1705,17 +1762,15 @@ function renderGames() {
             </div>` : ''}
 
             <div>
-                <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${activePlayerCount}/4):</p>
+                <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${parts.activePlayerCount}/4):</p>
                 <div class="flex flex-wrap gap-1.5">
                     ${renderPlayersHtml(game.players, game.substitutes)}
                 </div>
             </div>
 
             <div class="flex items-center gap-2 pt-1">
-                ${actionButtonHtml}
-                <button onclick="event.stopPropagation(); openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center" title="Chia sẻ">
-                    <i class="fa-solid fa-share-nodes"></i>
-                </button>
+                ${parts.actionButtonHtml}
+                ${parts.actionShareHtml}
             </div>
         `;
         container.appendChild(card);
@@ -1743,8 +1798,11 @@ async function joinGame(gameId) {
     const game = (gamesData || []).find(g => g.id === gameId);
     if (!game) return;
 
-    if (isGameExpired(game)) {
-        // FIX: showToast chỉ nhận (message, icon) - gộp lại thành 1 chuỗi thay vì truyền thừa tham số thứ 3
+    // FIX: isGameExpired() trả về CHUỖI ('OPEN'/'EXPIRED'/'ENDED') chứ không phải boolean,
+    // nên "if (isGameExpired(game))" luôn đúng (mọi chuỗi không rỗng đều truthy) -> chặn nhầm
+    // cả những kèo còn đang mở. Phải so sánh đúng giá trị trả về.
+    const gameStatus = isGameExpired(game);
+    if (gameStatus === 'EXPIRED' || gameStatus === 'ENDED') {
         showToast('Kèo này đã hết hạn. Bày kèo khác ngay!', '⏰');
         return;
     }
@@ -1770,16 +1828,7 @@ async function joinGame(gameId) {
         isReserve = true;
     }
 
-    if (supabaseClient) {
-        try {
-            await supabaseClient
-                .from('games')
-                .update({ players: game.players, substitutes: game.substitutes, status: game.status })
-                .eq('id', gameId);
-        } catch (err) {
-            console.error("Lỗi cập nhật Supabase:", err);
-        }
-    }
+    await updateSupabaseRow('games', 'id', gameId, { players: game.players, substitutes: game.substitutes, status: game.status });
 
     renderGames();
     renderLeaderboard();
@@ -1787,7 +1836,7 @@ async function joinGame(gameId) {
     if (!isReserve) {
         playJoinChime();
         showToast(
-            game.players.length === 4 ? `🎉 Bàn #${game.id} đã TỨ ĐẠI PHỎNG THỦ!` : `Đã ghi tên ${currentUser.name} vào bàn!`,
+            game.players.length === 4 ? `🎉 Bàn #${game.id} đã đủ TỨ ĐẠI PHỎNG THỦ!` : `Đã ghi tên ${currentUser.name} vào bàn!`,
             '✅'
         );
     } else {
@@ -1811,21 +1860,12 @@ async function leaveGame(gameId) {
     if (wasInMain && game.substitutes.length > 0 && game.players.length < 4) {
         const promotedPlayer = game.substitutes.shift();
         game.players.push(promotedPlayer);
-        showToast(`🎉 Tay bài dự bị ${promotedPlayer.name} đã được tự động đôn lên bàn chính!`, '✨');
+        showToast(`🎉 Tay bài dự bị ${promotedPlayer.name} đã được tự động đôn lên tay chính!`, '✨');
     }
 
     game.status = game.players.length === 4 ? 'FULL' : 'OPEN';
 
-    if (supabaseClient) {
-        try {
-            await supabaseClient
-                .from('games')
-                .update({ players: game.players, substitutes: game.substitutes, status: game.status })
-                .eq('id', gameId);
-        } catch (err) {
-            console.error("Lỗi cập nhật Supabase:", err);
-        }
-    }
+    await updateSupabaseRow('games', 'id', gameId, { players: game.players, substitutes: game.substitutes, status: game.status });
 
     renderGames();
     renderLeaderboard();
@@ -1919,7 +1959,7 @@ function openCreateGameModal() {
     const startSelect = document.getElementById('gameStartTimeSelect');
     const times = generate30MinIntervals();
 
-        dateSelect.innerHTML = '';
+    dateSelect.innerHTML = '';
     const today = new Date();
     for (let i = 0; i < 14; i++) {
         const d = new Date(today);
@@ -2076,24 +2116,12 @@ function openGameDetailModal(gameId) {
         return;
     }
 
-    const expired = isGameExpired(game);
-    const activePlayerCount = game.players ? game.players.length : 0;
-    const isFull = activePlayerCount >= 4;
+    const gameStatus = isGameExpired(game);
+    const expired = gameStatus === 'EXPIRED' || gameStatus === 'ENDED';
+    syncGameStatusToSupabase(game);
 
-    const isUserInMain = currentUser && game.players?.some(p => p.phone === currentUser.phone);
-    const isUserInSub = currentUser && game.substitutes?.some(s => s.phone === currentUser.phone);
-    const isUserInGame = isUserInMain || isUserInSub;
-
-    let statusBadgeHtml = '';
-    if (expired) {
-        statusBadgeHtml = `<span class="bg-slate-100 text-slate-600 border-slate-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Đã Hết Hạn</span>`;
-    } else {
-        statusBadgeHtml = isFull
-            ? `<span class="bg-red-100 text-red-700 border-red-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Đủ 4 Chân</span>`
-            : `<span class="bg-emerald-100 text-emerald-800 border-emerald-300 border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">Còn ${4 - activePlayerCount} Chỗ</span>`;
-    }
-
-    const actionButtonHtml = buildGameActionButtonHtml(game, expired, isFull, isUserInGame, isUserInSub, false);
+    // Dùng lại đúng logic build UI như card danh sách (badge, nút hành động, nút chia sẻ)
+    const parts = getGameCardParts(game, gameStatus, false);
 
     container.innerHTML = `
         <div class="bg-white rounded-2xl border-2 ${expired ? 'border-slate-300' : 'border-amber-400'} p-4 shadow-sm space-y-3 relative overflow-hidden">
@@ -2107,7 +2135,7 @@ function openGameDetailModal(gameId) {
                         <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${formatGameTimeDisplay(game)}
                     </h3>
                 </div>
-                ${statusBadgeHtml}
+                ${parts.fullnessBadgeHtml}
             </div>
 
             ${game.note ? `
@@ -2117,17 +2145,15 @@ function openGameDetailModal(gameId) {
             </div>` : ''}
 
             <div>
-                <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${activePlayerCount}/4):</p>
+                <p class="text-[10px] text-slate-400 font-bold uppercase mb-1.5">Danh Sách Tay Bài (${parts.activePlayerCount}/4):</p>
                 <div class="flex flex-wrap gap-1.5">
                     ${renderPlayersHtml(game.players, game.substitutes)}
                 </div>
             </div>
 
             <div class="flex items-center gap-2 pt-1">
-                ${actionButtonHtml}
-                <button onclick="openShareModal('${game.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center" title="Chia sẻ bàn">
-                    <i class="fa-solid fa-share-nodes"></i>
-                </button>
+                ${parts.actionButtonHtml}
+                ${parts.actionShareHtml}
             </div>
         </div>
     `;
@@ -2173,18 +2199,13 @@ function closeShareModal() {
 function copyShareLink() {
     if (!currentShareGameId) return;
     const previewEl = document.getElementById('sharePreviewText');
-    const shareUrl = typeof getGameShareUrl === 'function' 
-        ? getGameShareUrl(currentShareGameId) 
-        : window.location.href;
-
+    const shareUrl = getGameShareUrl(currentShareGameId);
     const previewText = previewEl ? previewEl.innerText : '';
 
     const textToCopy = `🀄 [HỘI MẠT CHƯỢC] ${previewText}\n👉 Link vào bàn: ${shareUrl}`;
     navigator.clipboard.writeText(textToCopy);
 
-    if (typeof showToast === 'function') {
-        showToast('Đã copy link rủ cạ cứng!', '📋');
-    }
+    showToast('Đã copy link rủ cạ cứng!', '📋');
     closeShareModal();
 }
 
@@ -2193,8 +2214,8 @@ async function simulateZaloShare() {
     const previewEl = document.getElementById('sharePreviewText');
     const textToCopy = previewEl ? previewEl.innerText : '';
     const shareUrl = getGameShareUrl(currentShareGameId);
- 
-    // Ưu tiên Web Share API: trên điện thoại sẽ mở đúng bảng chia sẻ của hệ điều hành,
+
+    // Ưu tiên Web Share API: trên điện thoại sẽ mở đúng bảng chia sẻ của hệ điều hành
     if (navigator.share) {
         try {
             await navigator.share({
@@ -2213,7 +2234,7 @@ async function simulateZaloShare() {
             console.warn('Web Share API lỗi, fallback sang copy link:', err);
         }
     }
- 
+
     // Fallback: trình duyệt không hỗ trợ Web Share API (chủ yếu là desktop) -> copy link để tự dán vào Zalo
     if (textToCopy && navigator.clipboard) navigator.clipboard.writeText(textToCopy);
     showToast('Đã copy link, dán vào Zalo giúp mình nhé!', '📋');
@@ -2369,11 +2390,7 @@ async function toggleLikePost(postId) {
     post.likes += post.isLiked ? 1 : -1;
     renderChatPosts();
 
-    if (supabaseClient) {
-        try {
-            await supabaseClient.from('posts').update({ likes: post.likes }).eq('id', postId);
-        } catch (err) {}
-    }
+    await updateSupabaseRow('posts', 'id', postId, { likes: post.likes });
 }
 
 function renderChatPosts() {
@@ -2576,16 +2593,17 @@ async function handleVerifyAdminMasterKey(e) {
         showToast('Mật mã Admin không chính xác!', '❌');
     }
 }
+
 // =====================================================================
 // BẢNG VÀNG - xếp hạng toàn bộ thành viên theo số kèo đã tham gia
 // =====================================================================
-        
+
 // Lấy tên theo phone cho tất cả các list cần hiển thị từ Whitelist
 function getCanonicalName(phone, fallbackName) {
     const found = (whitelistData || []).find(u => u.phone === phone);
     return (found && found.name) ? found.name : (fallbackName || phone);
 }
-        
+
 function computeParticipationStats() {
     const statsByPhone = {};
 
@@ -2603,7 +2621,6 @@ function computeParticipationStats() {
                 statsByPhone[p.phone] = { phone: p.phone, name: getCanonicalName(p.phone, p.name), count: 0 };
             }
             statsByPhone[p.phone].count += 1;
-            // Tên luôn lấy từ getCanonicalName (ưu tiên Whitelist), không cần gán lại thủ công ở đây nữa
         });
     });
 
