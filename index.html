@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hội Mạt Chược Vui Vẻ</title>
+    <title>Hội Mạt Chược Vui Nhộn</title>
     <link rel="icon" type="image/x-icon" href="/mahjong/favicon.png">
     
     <!-- Icon hiển thị khi lưu ra màn hình chính trên iPhone/iPad -->
@@ -240,22 +240,22 @@
 
             <!-- TAB 3: TÁM CHUYỆN (CHAT & PHOTO FEED) -->
             <div id="tabViewChat" class="space-y-4 hidden">
-                <div class="bg-white rounded-2xl border-2 border-amber-400 p-3.5 shadow-sm space-y-3">
-                    <div class="flex items-center gap-2">
+                <div class="bg-white rounded-2xl border-2 border-amber-400 p-3.5 shadow-sm space-y-0.5">
+                    <div class="flex items-center gap-2 mb-2">
                         <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-red-950 font-black flex items-center justify-center text-xs shadow">🀄</div>
                         <div>
-                            <span class="text-xs font-bold text-slate-800 block leading-tight">Góc Tám Hội Viên</span>
-                            <span class="text-[10px] text-slate-500 font-semibold">Khoe ảnh ù bài hoặc chém gió cùng anh em</span>
+                            <div class="text-xs font-bold text-slate-800">Góc Tám Hội Viên</div>
+                            <div class="text-[10px] text-slate-500 font-semibold">Khoe ảnh bài đẹp hoặc chém gió cùng anh em</div>
                         </div>
                     </div>
-                    <textarea id="chatInputText" rows="2" placeholder="Nhập nội dung tám chuyện, hẹn giờ phỏng bài hay khoảnh khắc ù đỉnh cao..." class="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-amber-500 resize-none"></textarea>
+                    <textarea id="chatInputText" rows="2" placeholder="Nhập nội dung tám chuyện, hẹn giờ lập kèo hoặc thêm ảnh tới đỉnh cao..." class="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-amber-500 resize-none"></textarea>
                     
                     <div id="imagePreviewContainer" class="relative hidden">
                         <img id="imagePreview" src="" alt="Preview" class="w-full max-h-52 object-cover rounded-xl border-2 border-amber-300">
                         <button onclick="removeImagePreview()" class="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold shadow">✕</button>
                     </div>
 
-                    <div class="flex items-center justify-between pt-1 border-t border-slate-100">
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-100">
                         <label for="chatImageInput" class="cursor-pointer bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition">
                             <i class="fa-solid fa-image text-emerald-600 text-sm"></i>
                             <span>Thêm ảnh</span>
@@ -2319,7 +2319,7 @@ async function uploadImageToSupabaseStorage(file) {
         const fileName = `mahjong_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
         const filePath = `posts/${fileName}`;
 
-        showToast('Đang tải ảnh lên Supabase Storage...', '☁️');
+        showToast('Đang tải ảnh lên trời...', '☁️');
 
         const { error } = await supabaseClient.storage.from('mahjong-photos').upload(filePath, file, { cacheControl: '3600', upsert: true });
         if (error) return null;
@@ -2370,7 +2370,7 @@ async function handleCreatePost() {
             }
         } catch (err) {
             console.error('Lỗi khi đăng bài (exception):', err);
-            showToast(`❌ Lỗi kết nối Supabase: ${err.message || err}`, '⚠️');
+            showToast(`❌ Lỗi kết nối với ông trời: ${err.message || err}`, '⚠️');
             return;
         }
     }
@@ -2415,8 +2415,8 @@ function renderChatPosts() {
                     <div class="flex items-center gap-2">
                         <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-red-950 font-black flex items-center justify-center text-xs shadow">🀄</div>
                         <div>
-                            <span class="text-xs font-bold text-slate-800 block leading-tight">${escapeHtml(post.author)}</span>
-                            <span class="text-[10px] text-slate-400 font-semibold">${post.timeAgo}</span>
+                            <div class="text-xs font-bold text-slate-800 block leading-tight">${escapeHtml(post.author)}</div>
+                            <div class="text-[10px] text-slate-400 font-semibold">${post.timeAgo}</div>
                         </div>
                     </div>
                 </div>
