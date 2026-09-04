@@ -185,10 +185,10 @@
                 <i class="fa-solid fa-shield-halved text-amber-400 text-sm"></i>
                 <p class="leading-tight font-medium">Hội Mạt Chược giao lưu giải trí • <b>Nghiêm cấm sát phạt cá cược tiền dưới mọi hình thức</b></p>
             </div>
-            <button onclick="enablePushNotifications()" class="w-full mb-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs border border-emerald-400 flex items-center justify-center gap-2 shadow-md transition">
+            <!--<button onclick="enablePushNotifications()" class="w-full mb-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-2.5 rounded-xl text-xs border border-emerald-400 flex items-center justify-center gap-2 shadow-md transition">
                 <i class="fa-solid fa-bell"></i>
                 <span>Bật Thông Báo Kèo Mới</span>
-            </button>
+            </button>-->
 
             <!-- TAB 1: GAMES LIST VIEW -->
             <div id="tabViewGames" class="space-y-4">
@@ -954,6 +954,62 @@ function toggleShowExpiredGames() {
 }
 
 // =====================================================================
+// LẤY TIMESTAMP ĐỂ SẮP XẾP KÈO THEO NĂM - THÁNG - NGÀY - GIỜ
+// =====================================================================
+function getGameSortTimestamp(game) {
+    if (!game) return Infinity;
+
+    if (game.startAt) {
+        const t = new Date(game.startAt).getTime();
+        if (!isNaN(t)) return t;
+    }
+    if (game.endAt) {
+        const t = new Date(game.endAt).getTime();
+        if (!isNaN(t)) return t;
+    }
+
+    // Dự phòng: parse từ chuỗi "time" dạng "HH:mm - HH:mm (Thứ X, dd/mm)" hoặc có dd/mm/yyyy
+    try {
+        const timeMatch = game.time.match(/(\d{2}):(\d{2})/);
+        const dateMatch = game.time.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+
+        let refDate = new Date();
+        if (dateMatch) {
+            const day = parseInt(dateMatch[1], 10);
+            const month = parseInt(dateMatch[2], 10) - 1;
+            const year = parseInt(dateMatch[3], 10);
+            refDate = new Date(year, month, day);
+        } else if (dateMatch2 = game.time.match(/(\d{2})\/(\d{2})(?!\/)/)) {
+            // Trường hợp không có năm, ví dụ "dd/mm" -> lấy năm hiện tại
+            const day = parseInt(dateMatch2[1], 10);
+            const month = parseInt(dateMatch2[2], 10) - 1;
+            refDate = new Date(new Date().getFullYear(), month, day);
+        }
+
+        if (timeMatch) {
+            const hours = parseInt(timeMatch[1], 10);
+            const minutes = parseInt(timeMatch[2], 10);
+            refDate.setHours(hours, minutes, 0, 0);
+        }
+
+        const t = refDate.getTime();
+        if (!isNaN(t)) return t;
+    } catch (e) {
+        console.error("Lỗi parse thời gian để sắp xếp kèo:", e);
+    }
+
+    return Infinity; // Không xác định được thời gian -> đẩy xuống cuối danh sách
+}
+
+function sortGamesByDateTime(games) {
+    return [...games].sort((a, b) => {
+        // Ưu tiên nhóm: Active (chưa hết hạn) luôn ở trên Expired (đã hết hạn)
+        if (a.expired !== b.expired) return a.expired ? 1 : -1;
+        // Trong cùng nhóm, sắp theo Năm - Tháng - Ngày - Giờ
+        return getGameSortTimestamp(a) - getGameSortTimestamp(b);
+    });
+}
+// =====================================================================
 // KHỞI ĐỘNG APP
 // =====================================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -1559,7 +1615,8 @@ function renderGames() {
     if (!container) return;
 
     // Tính "expired" MỘT LẦN cho mỗi kèo, rồi tái sử dụng thay vì gọi isGameExpired() lặp lại nhiều lần
-    const allGames = (gamesData || []).map(game => ({ ...game, expired: isGameExpired(game) }));
+    let allGames = (gamesData || []).map(game => ({ ...game, expired: isGameExpired(game) }));
+    allGames = sortGamesByDateTime(allGames); // Sắp xếp theo Năm - Tháng - Ngày - Giờ (gần nhất lên trước)
     const activeCount = allGames.filter(g => !g.expired).length;
     const expiredCount = allGames.length - activeCount;
 
@@ -1619,15 +1676,15 @@ function renderGames() {
         card.innerHTML = `
             ${expired ? `<span class="absolute top-2 right-2 bg-slate-200 text-slate-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-slate-300">Đã Hết Hạn</span>` : ''}
 
-            <div class="flex items-center justify-between border-b border-amber-100 pb-2">
-                <div class="flex items-center gap-2">
-                    <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
-                    <div>
-                        <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
-                            <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time}
-                        </h3>
+            <div class="flex items-start justify-between border-b border-amber-100 pb-2">
+                <div>
+                    <div class="flex items-center gap-2 pb-1">
+                        <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
                         <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${escapeHtml(game.locationNote || 'Địa điểm quen thuộc')}</p>
                     </div>
+                    <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
+                        <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${formatGameTimeDisplay(game)}
+                    </h3>
                 </div>
                 ${!expired ? `
                 <span class="${isFull ? 'bg-red-100 text-red-700 border-red-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300'} border px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase">
@@ -1808,6 +1865,44 @@ function updateEndTimeOptions() {
     if (validEndTimes.includes(targetEndTime)) endSelect.value = targetEndTime;
 }
 
+// =====================================================================
+// TÍNH NHÃN NGÀY ĐỘNG (Hôm nay / Ngày mai / Thứ X) - LUÔN ĐÚNG THEO NGÀY HIỆN TẠI
+// =====================================================================
+function getDynamicDayLabel(dateInput) {
+    const target = new Date(dateInput);
+    target.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const diffDays = Math.round((target - today) / (1000 * 60 * 60 * 24));
+
+    const dayNum = String(target.getDate()).padStart(2, '0');
+    const month = String(target.getMonth() + 1).padStart(2, '0');
+
+    if (diffDays === 0) return `Hôm nay, ${dayNum}/${month}`;
+    if (diffDays === 1) return `Ngày mai, ${dayNum}/${month}`;
+    if (diffDays === -1) return `Hôm qua, ${dayNum}/${month}`;
+    return `${DAYS_VN[target.getDay()]}, ${dayNum}/${month}`;
+}
+
+// Ghép lại chuỗi "HH:mm - HH:mm (Nhãn ngày, dd/mm)" từ startAt/endAt thay vì dùng chuỗi 'time' đã lưu cứng
+function formatGameTimeDisplay(game) {
+    if (!game || !game.startAt) return (game && game.time) || 'Chưa xếp giờ'; // dự phòng cho dữ liệu cũ
+
+    const start = new Date(game.startAt);
+    const startTimeStr = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+
+    let endTimeStr = '';
+    if (game.endAt) {
+        const end = new Date(game.endAt);
+        endTimeStr = `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+    }
+
+    const dayLabel = getDynamicDayLabel(start);
+    return endTimeStr ? `${startTimeStr} - ${endTimeStr} (${dayLabel})` : `${startTimeStr} (${dayLabel})`;
+}
+
 function openCreateGameModal() {
     if (!currentUser) {
         openMandatoryLoginModal();
@@ -1818,9 +1913,9 @@ function openCreateGameModal() {
     const startSelect = document.getElementById('gameStartTimeSelect');
     const times = generate30MinIntervals();
 
-    dateSelect.innerHTML = '';
+        dateSelect.innerHTML = '';
     const today = new Date();
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 14; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
 
@@ -1829,9 +1924,12 @@ function openCreateGameModal() {
         const dayNum = String(d.getDate()).padStart(2, '0');
         const isoDate = `${year}-${month}-${dayNum}`;
 
+        // Tuần 2 (từ ngày thứ 7 trở đi) thêm chữ "Tuần sau" để tránh nhầm lẫn khi trùng Thứ với tuần 1
+        const weekPrefix = i >= 7 ? '(Tuần sau) ' : '';
+
         const displayLabel = i === 0 ? `Hôm nay, ${dayNum}/${month}` :
                               i === 1 ? `Ngày mai, ${dayNum}/${month}` :
-                              `${DAYS_VN[d.getDay()]}, ${dayNum}/${month}`;
+                              `${weekPrefix}${DAYS_VN[d.getDay()]}, ${dayNum}/${month}`;
 
         const opt = document.createElement('option');
         opt.value = isoDate;
@@ -1993,15 +2091,15 @@ function openGameDetailModal(gameId) {
 
     container.innerHTML = `
         <div class="bg-white rounded-2xl border-2 ${expired ? 'border-slate-300' : 'border-amber-400'} p-4 shadow-sm space-y-3 relative overflow-hidden">
-            <div class="flex items-center justify-between border-b border-amber-100 pb-2">
-                <div class="flex items-center gap-2">
-                    <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
-                    <div>
-                        <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
-                            <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${game.time || 'Chưa xếp giờ'}
-                        </h3>
+            <div class="flex items-start justify-between border-b border-amber-100 pb-2">
+                <div>
+                    <div class="flex items-center gap-2 pb-1">
+                        <span class="bg-red-950 text-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-lg">#${game.id}</span>
                         <p class="text-[10px] text-slate-500 font-semibold"><i class="fa-solid fa-location-dot text-rose-500"></i> ${escapeHtml(game.locationNote || 'Địa điểm quen thuộc')}</p>
                     </div>
+                    <h3 class="font-display font-bold text-slate-800 text-sm flex items-center gap-1">
+                        <i class="fa-solid fa-clock ${expired ? 'text-slate-400' : 'text-amber-600'}"></i> ${formatGameTimeDisplay(game)}
+                    </h3>
                 </div>
                 ${statusBadgeHtml}
             </div>
@@ -2051,7 +2149,7 @@ function openShareModal(gameId) {
     const previewEl = document.getElementById('sharePreviewText');
 
     if (game && previewEl) {
-        previewEl.innerText = `Trận chơi lúc ${game.time} tại ${game.locationNote}. Hiện có ${game.players ? game.players.length : 0}/4 chân!`;
+        previewEl.innerText = `Trận chơi lúc ${formatGameTimeDisplay(game)} tại ${game.locationNote}. Hiện có ${game.players ? game.players.length : 0}/4 chân!`;
     }
 
     const modal = document.getElementById('shareModal');
