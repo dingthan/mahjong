@@ -2166,20 +2166,44 @@ function closeShareModal() {
 
 function copyShareLink() {
     if (!currentShareGameId) return;
-    const shareUrl = getGameShareUrl(currentShareGameId);
-    navigator.clipboard.writeText(`🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${shareUrl}`);
-    showToast('Đã copy link rủ cạ cứng!', '📋');
+    const previewEl = document.getElementById('sharePreviewText');
+    const textToCopy = previewEl ? previewEl.innerText : '';
+    if (!textToCopy) return;
+ 
+    navigator.clipboard.writeText(textToCopy);
+    showToast('Đã copy nội dung!', '📋');
     closeShareModal();
 }
 
-function simulateZaloShare() {
+async function simulateZaloShare() {
     if (!currentShareGameId) return;
+    const previewEl = document.getElementById('sharePreviewText');
+    const textToCopy = previewEl ? previewEl.innerText : '';
     const shareUrl = getGameShareUrl(currentShareGameId);
-    const shareText = `🀄 [HỘI MẠT CHƯỢC] Vào bàn phỏng bài ngay: ${shareUrl}`;
-
-    if (navigator.clipboard) navigator.clipboard.writeText(shareText);
-
-    showToast('Đã copy link & mở Zalo...', '📱');
+ 
+    // Ưu tiên Web Share API: trên điện thoại sẽ mở đúng bảng chia sẻ của hệ điều hành,
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: '🀄 Hội Mạt Chược',
+                text: textToCopy,
+                url: shareUrl
+            });
+            closeShareModal();
+            return;
+        } catch (err) {
+            // Người dùng tự bấm Huỷ trên bảng chia sẻ -> không phải lỗi, chỉ đóng modal lại
+            if (err.name === 'AbortError') {
+                closeShareModal();
+                return;
+            }
+            console.warn('Web Share API lỗi, fallback sang copy link:', err);
+        }
+    }
+ 
+    // Fallback: trình duyệt không hỗ trợ Web Share API (chủ yếu là desktop) -> copy link để tự dán vào Zalo
+    if (textToCopy && navigator.clipboard) navigator.clipboard.writeText(textToCopy);
+    showToast('Đã copy link, dán vào Zalo giúp mình nhé!', '📋');
     closeShareModal();
 }
 
